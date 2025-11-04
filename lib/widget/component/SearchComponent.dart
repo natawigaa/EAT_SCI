@@ -8,12 +8,12 @@ class SearchComponent extends StatelessWidget {
   final TextEditingController? controller;
 
   const SearchComponent({
-    Key? key,
+    super.key,
     this.hintText = 'Search for food...',
     this.onChanged,
     this.onSubmitted,
     this.controller,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

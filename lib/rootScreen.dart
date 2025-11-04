@@ -2,9 +2,12 @@ import 'package:eatscikmitl/const/app_color.dart';
 import 'package:eatscikmitl/screen/FoodOrderScreen.dart';
 import 'package:eatscikmitl/screen/HomeScreen.dart';
 import 'package:eatscikmitl/screen/ProfileScreen.dart';
+import 'package:eatscikmitl/screen/OrderTrackingScreen.dart';
+import 'package:eatscikmitl/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_iconly/flutter_iconly.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui' as ui;
 
 class RootScreen extends StatefulWidget {
@@ -27,18 +30,23 @@ class _RootScreenState extends State<RootScreen>
   late Animation<Offset> _slideAnimation;
 
   // Bottom navigation animation controllers
-  List<AnimationController> _iconAnimationControllers = [];
-  List<Animation<double>> _iconScaleAnimations = [];
+  final List<AnimationController> _iconAnimationControllers = [];
+  final List<Animation<double>> _iconScaleAnimations = [];
 
   @override
   void initState() {
     super.initState();
+    
+    // 🧪 ทดสอบการเชื่อมต่อ Supabase
+    _testSupabaseConnection();
+    
     currentScreen = widget.currentScreens;
     
     screens = const [
       FoodOrderScreen(),
       HomeScreen(),
-      ProfileScreen()
+      OrderTrackingScreen(), // แท็บที่ 3: ติดตามออเดอร์
+      ProfileScreen()        // แท็บที่ 4: โปรไฟล์
     ];
     
     controller = PageController(initialPage: currentScreen);
@@ -101,6 +109,26 @@ class _RootScreenState extends State<RootScreen>
     _iconAnimationControllers[currentScreen].forward();
   }
 
+  // 🧪 ฟังก์ชันทดสอบการเชื่อมต่อ Supabase + ดึงข้อมูลจริง
+  void _testSupabaseConnection() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final user = supabase.auth.currentUser;
+      
+      print('✅ Supabase Connected Successfully!');
+      print('👤 Current User: ${user?.email ?? "No user logged in"}');
+      print('🔑 User ID: ${user?.id ?? "N/A"}');
+      print('🔗 Supabase instance is ready!');
+      
+      // ทดสอบดึงข้อมูลจริงจาก Database
+      print('📊 Testing database connection...');
+      await SupabaseService.testConnection();
+      
+    } catch (e) {
+      print('❌ Supabase Connection Error: $e');
+    }
+  }
+
   void _onDestinationSelected(int index) {
     if (index == currentScreen) return;
 
@@ -128,7 +156,7 @@ class _RootScreenState extends State<RootScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true,
+      extendBody: false,
       body: Stack(
         children: [
           // Background gradient
@@ -161,92 +189,56 @@ class _RootScreenState extends State<RootScreen>
           ),
         ],
       ),
-      bottomNavigationBar: SlideTransition(
-        position: _slideAnimation,
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: Container(
-              margin: const EdgeInsets.only(
-                left: 20,
-                right: 20,
-                bottom: 20,
-              ),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(25),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.mainOrange.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                    spreadRadius: 0,
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                    spreadRadius: 0,
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(25),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white.withOpacity(0.9),
-                          Colors.white.withOpacity(0.8),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(25),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 1,
-                      ),
-                    ),
-                    child: NavigationBar(
-                      selectedIndex: currentScreen,
-                      backgroundColor: Colors.transparent,
-                      surfaceTintColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      elevation: 0,
-                      height: 70,
-                      indicatorColor: AppColors.mainOrange.withOpacity(0.2),
-                      indicatorShape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      onDestinationSelected: _onDestinationSelected,
-                      destinations: [
-                        _buildAnimatedDestination(
-                          0,
-                          IconlyBold.bag,
-                          IconlyLight.bag,
-                          "คำสั่งซื้อ",
-                        ),
-                        _buildAnimatedDestination(
-                          1,
-                          IconlyBold.home,
-                          IconlyLight.home,
-                          "หน้าหลัก",
-                        ),
-                        _buildAnimatedDestination(
-                          2,
-                          IconlyBold.profile,
-                          IconlyLight.profile,
-                          "โปรไฟล์",
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
             ),
+          ],
+        ),
+        child: SafeArea(
+          child: NavigationBar(
+            selectedIndex: currentScreen,
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            elevation: 0,
+            height: 65,
+            indicatorColor: AppColors.mainOrange.withOpacity(0.15),
+            indicatorShape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            onDestinationSelected: _onDestinationSelected,
+            destinations: [
+              _buildAnimatedDestination(
+                0,
+                IconlyBold.bag,
+                IconlyLight.bag,
+                "คำสั่งซื้อ",
+              ),
+              _buildAnimatedDestination(
+                1,
+                IconlyBold.home,
+                IconlyLight.home,
+                "หน้าหลัก",
+              ),
+              _buildAnimatedDestination(
+                2,
+                IconlyBold.document,
+                IconlyLight.document,
+                "ติดตามออเดอร์",
+              ),
+              _buildAnimatedDestination(
+                3,
+                IconlyBold.profile,
+                IconlyLight.profile,
+                "โปรไฟล์",
+              ),
+            ],
           ),
         ),
       ),
@@ -259,51 +251,17 @@ class _RootScreenState extends State<RootScreen>
     IconData unselectedIcon,
     String label,
   ) {
+    final isSelected = currentScreen == index;
     return NavigationDestination(
-      selectedIcon: AnimatedBuilder(
-        animation: _iconScaleAnimations[index],
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _iconScaleAnimations[index].value,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: currentScreen == index
-                    ? AppColors.mainOrange.withOpacity(0.1)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                selectedIcon,
-                color: AppColors.mainOrange,
-                size: 24,
-              ),
-            ),
-          );
-        },
+      selectedIcon: Icon(
+        selectedIcon,
+        color: AppColors.mainOrange,
+        size: 26,
       ),
-      icon: AnimatedBuilder(
-        animation: _iconScaleAnimations[index],
-        builder: (context, child) {
-          return Transform.scale(
-            scale: currentScreen == index ? 0.8 : 1.0,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                unselectedIcon,
-                color: currentScreen == index
-                    ? AppColors.mainOrange
-                    : Colors.grey.shade600,
-                size: 22,
-              ),
-            ),
-          );
-        },
+      icon: Icon(
+        unselectedIcon,
+        color: Colors.grey.shade600,
+        size: 24,
       ),
       label: label,
     );

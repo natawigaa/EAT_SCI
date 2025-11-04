@@ -12,7 +12,6 @@ class StudentUser {
   final int year;
   final String university;
   final DateTime joinDate;
-  final double walletBalance;
   final int loyaltyPoints;
   final List<String> favoriteRestaurants;
   final List<Map<String, dynamic>> orderHistory;
@@ -31,7 +30,6 @@ class StudentUser {
     required this.year,
     required this.university,
     required this.joinDate,
-    this.walletBalance = 0.0,
     this.loyaltyPoints = 0,
     this.favoriteRestaurants = const [],
     this.orderHistory = const [],
@@ -64,7 +62,6 @@ class StudentUser {
       'year': year,
       'university': university,
       'joinDate': joinDate.toIso8601String(),
-      'walletBalance': walletBalance,
       'loyaltyPoints': loyaltyPoints,
       'favoriteRestaurants': favoriteRestaurants,
       'orderHistory': orderHistory,
@@ -86,7 +83,6 @@ factory StudentUser.fromJson(Map<String, dynamic> json) {
       year: json['year'],
       university: json['university'],
       joinDate: DateTime.parse(json['joinDate']),
-      walletBalance: json['walletBalance']?.toDouble() ?? 0.0,
       loyaltyPoints: json['loyaltyPoints'] ?? 0,
       favoriteRestaurants: List<String>.from(json['favoriteRestaurants'] ?? []),
       orderHistory: List<Map<String, dynamic>>.from(json['orderHistory'] ?? []),
@@ -111,25 +107,9 @@ class SampleUserData {
       year: 3,
       university: 'สถาบันเทคโนโลยีพระจอมเกล้าคุณทหารลาดกระบัง',
       joinDate: DateTime(2024, 6, 15),
-      walletBalance: 150.50,
       loyaltyPoints: 850,
       favoriteRestaurants: ['shop_001', 'shop_003', 'shop_005'],
-      orderHistory: [
-        {
-          'orderId': 'order_001',
-          'restaurantName': 'ร้านป้าสมใส',
-          'totalAmount': 85.0,
-          'orderDate': '2024-12-15T12:30:00',
-          'status': 'completed'
-        },
-        {
-          'orderId': 'order_002',
-          'restaurantName': 'ข้าวมันไก่ป้าเล็ก',
-          'totalAmount': 45.0,
-          'orderDate': '2024-12-14T13:15:00',
-          'status': 'completed'
-        },
-      ],
+      orderHistory: [], // เริ่มต้นด้วย list ว่าง - ให้ผู้ใช้สั่งอาหารจริงก่อน
       preferences: {
         'notifications': true,
         'language': 'th',

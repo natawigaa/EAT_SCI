@@ -17,7 +17,7 @@ class CardComponent extends StatelessWidget {
   final VoidCallback? onTap;
 
   const CardComponent({
-    Key? key,
+    super.key,
     required this.restaurantId,
     required this.restaurantImage,
     required this.restaurantName,
@@ -30,7 +30,7 @@ class CardComponent extends StatelessWidget {
     required this.location,
     required this.menuItemsCount,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +126,7 @@ class CardComponent extends StatelessWidget {
                     // Rating and menu count
                     Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.star,
                           color: Colors.amber,
                           size: 14,
@@ -243,11 +243,25 @@ class CardComponent extends StatelessWidget {
   }
 
   TimeOfDay _parseTime(String timeString) {
-    final parts = timeString.split(':');
-    return TimeOfDay(
-      hour: int.parse(parts[0]),
-      minute: int.parse(parts[1]),
-    );
+    // แยกทั้ง : และ . เพื่อรองรับทั้งสองรูปแบบ
+    final parts = timeString.contains(':') 
+        ? timeString.split(':') 
+        : timeString.split('.');
+    
+    if (parts.length != 2) {
+      // ถ้าไม่สามารถแยกได้ ให้ใช้เวลาเริ่มต้น
+      return const TimeOfDay(hour: 8, minute: 0);
+    }
+    
+    try {
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (e) {
+      // ถ้า parse ไม่ได้ ให้ใช้เวลาเริ่มต้น
+      print('❌ Error parsing time: $timeString - $e');
+      return const TimeOfDay(hour: 8, minute: 0);
+    }
   }
 
   bool _isTimeInRange(TimeOfDay current, TimeOfDay start, TimeOfDay end) {
@@ -275,14 +289,14 @@ class SimpleRestaurantCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const SimpleRestaurantCard({
-    Key? key,
+    super.key,
     required this.restaurantImage,
     required this.restaurantName,
     required this.category,
     required this.rating,
     required this.location,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -356,14 +370,14 @@ class SimpleRestaurantCard extends StatelessWidget {
                       children: [
                         Text(
                           category,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.mainOrange,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Icon(
+                        const Icon(
                           Icons.star,
                           color: Colors.amber,
                           size: 12,

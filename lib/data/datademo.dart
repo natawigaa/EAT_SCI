@@ -276,6 +276,44 @@ class DataDemo {
     },
   ];
 
+  // เริ่มต้นด้วย orders ว่างเปล่า - ให้ผู้ใช้สั่งอาหารก่อนถึงจะมี orders
+  List<Map<String, dynamic>> orders = [];
+
+  List<Map<String, dynamic>> cartItems = [];
+
+  static Map<String, Map<String, String>> restaurantCredentials = {
+    'shop_001': {
+      'email': 'pasom@eatsci.com',
+      'password': 'pasom123',
+      'restaurantName': 'ร้านป้าสมใส',
+    },
+    'shop_002': {
+      'email': 'uncleboon@eatsci.com',
+      'password': 'boon123',
+      'restaurantName': 'ร้านก๋วยเตี๋ยวลุงบุญ',
+    },
+    'shop_003': {
+      'email': 'palek@eatsci.com',
+      'password': 'palek123',
+      'restaurantName': 'ข้าวมันไก่ป้าเล็ก',
+    },
+    'shop_004': {
+      'email': 'pajiw@eatsci.com',
+      'password': 'pajiw123',
+      'restaurantName': 'ร้านอีสานป้าจิ๋ว',
+    },
+    'shop_005': {
+      'email': 'unclecoffee@eatsci.com',
+      'password': 'coffee123',
+      'restaurantName': 'ร้านเครื่องดื่ม Uncle Coffee',
+    },
+    'shop_006': {
+      'email': 'panit@eatsci.com',
+      'password': 'panit123',
+      'restaurantName': 'ของหวานป้านิด',
+    },
+  };
+
   // ฟังก์ชันช่วยในการดึงข้อมูล
   static List<Map<String, dynamic>> getRestaurantsByCategory(String category) {
     return restaurants.where((restaurant) => restaurant['category'] == category).toList();

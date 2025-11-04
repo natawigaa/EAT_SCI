@@ -1,69 +1,25 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:eatscikmitl/const/app_color.dart';
+import 'package:eatscikmitl/services/cart_service.dart';
+import 'package:eatscikmitl/innnerScreen/PaymentScreen.dart';
+import '../utils/notification_helper.dart';
 
 class FoodOrderScreen extends StatefulWidget {
-  const FoodOrderScreen({Key? key}) : super(key: key);
+  const FoodOrderScreen({super.key});
 
   @override
   State<FoodOrderScreen> createState() => _FoodOrderScreenState();
 }
 
 class _FoodOrderScreenState extends State<FoodOrderScreen> {
-  List<Map<String, dynamic>> cartItems = [
-    {
-      'studentId': '65070001',
-      'itemId': 'item_001',
-      'restaurantName': 'ร้านป้าสมใส',
-      'restaurantId': 'shop_001',
-      'imgUrl': 'assets/images/pad_kra_pao_gai.jpg',
-      'foodname': 'ผัดกะเพราไก่',
-      'price': 40,
-      'quantity': 2,
-      'specialRequest': 'ไข่ดาวสุกมาก',
-      'addOns': [
-        {'name': 'ข้าวเพิ่ม', 'price': 5}
-      ]
-    },
-    {
-      'studentId': '65070001',
-      'itemId': 'item_002',
-      'restaurantName': 'ข้าวมันไก่ป้าเล็ก',
-      'restaurantId': 'shop_003',
-      'imgUrl': 'assets/images/khao_man_gai.jpg',
-      'foodname': 'ข้าวมันไก่ต้ม',
-      'price': 40,
-      'quantity': 1,
-      'specialRequest': '',
-      'addOns': []
-    },
-    {
-      'studentId': '65070001',
-      'itemId': 'item_003',
-      'restaurantName': 'Uncle Coffee',
-      'restaurantId': 'shop_005',
-      'imgUrl': 'assets/images/thai_tea.jpg',
-      'foodname': 'ชาไทยเย็น',
-      'price': 20,
-      'quantity': 3,
-      'specialRequest': 'น้ำแข็งเยอะๆ',
-      'addOns': []
-    },
-  ];
-
-  double get totalAmount {
-    return cartItems.fold(0.0, (sum, item) {
-      double itemTotal = (item['price'] * item['quantity']).toDouble();
-      // Add add-ons price
-      for (var addon in item['addOns']) {
-        itemTotal += addon['price'] * item['quantity'];
-      }
-      return sum + itemTotal;
-    });
-  }
-
-  int get totalItems {
-    return cartItems.fold(0, (sum, item) => sum + (item['quantity'] as int));
-  }
+  final CartService _cartService = CartService();
+  
+  // เนเธเนเธเนเธญเธกเธนเธฅเธเธฒเธ CartService เนเธ—เธเธเธฒเธฃเน€เธเนเธเน€เธญเธ
+  List<Map<String, dynamic>> get cartItems => _cartService.cartItems;
+  
+  double get totalAmount => _cartService.totalAmount;
+  
+  int get totalItems => _cartService.totalItems;
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +29,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
-          'รายการอาหารที่สั่ง',
+          'รายการตะกร้า',
           style: TextStyle(
             color: Colors.black87,
             fontWeight: FontWeight.bold,
@@ -104,7 +60,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                     },
                   ),
                 ),
-                SizedBox(height: 20,),
+                const SizedBox(height: 20,),
                 // Bottom Section
                 _buildBottomSection(),
 
@@ -114,6 +70,8 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
   }
 
   Widget _buildCartSummary() {
+    final restaurantName = _cartService.currentRestaurantName;
+    
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -129,48 +87,89 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // เนเธชเธ”เธเธเธทเนเธญเธฃเนเธฒเธเธ—เธตเนเธเธณเธฅเธฑเธเธชเธฑเนเธ
+          if (restaurantName != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.mainOrange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.mainOrange.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.restaurant,
+                    size: 16,
+                    color: AppColors.mainOrange,
+                  ),
+                  SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      restaurantName,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.mainOrange,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          
+          // เธเธณเธเธงเธเนเธฅเธฐเธขเธญเธ”เธฃเธงเธก
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'จำนวนรายการ',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                     'ยอดรวม',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '฿${totalAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                '$totalItems รายการ',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'ยอดรวม',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '฿${totalAmount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.mainOrange,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'ยอดรวม',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '฿${totalAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.mainOrange,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -211,7 +210,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
             // Restaurant name
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.restaurant,
                   size: 16,
                   color: AppColors.mainOrange,
@@ -219,7 +218,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                 const SizedBox(width: 4),
                 Text(
                   item['restaurantName'],
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.mainOrange,
                     fontWeight: FontWeight.w600,
@@ -242,9 +241,22 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                   child: item['imgUrl'].isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.asset(
+                          child: Image.network(
                             item['imgUrl'],
                             fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: CircularProgressIndicator(
+                                  value: loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                  strokeWidth: 2,
+                                  color: AppColors.mainOrange,
+                                ),
+                              );
+                            },
                             errorBuilder: (context, error, stackTrace) {
                               return Icon(
                                 Icons.fastfood,
@@ -278,7 +290,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '฿${item['price']} × ${item['quantity']}',
+                        '฿${item['price']} จำนวน ${item['quantity']}',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[600],
@@ -290,7 +302,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                         const SizedBox(height: 4),
                         ...item['addOns'].map<Widget>((addon) {
                           return Text(
-                            '+ ${addon['name']} (฿${addon['price']})',
+                            '+ ${addon['name']} (เธฟ${addon['price']})',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[500],
@@ -303,7 +315,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                       if (item['specialRequest'].isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
-                          'หมายเหตุ: ${item['specialRequest']}',
+                           'หมายเหตุ: ${item['specialRequest']}',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.blue[600],
@@ -320,7 +332,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                   children: [
                     Text(
                       '฿${itemTotalPrice.toStringAsFixed(2)}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: AppColors.mainOrange,
@@ -366,7 +378,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                           child: Container(
                             width: 28,
                             height: 28,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: AppColors.mainOrange,
                               shape: BoxShape.circle,
                             ),
@@ -393,7 +405,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                   child: TextButton.icon(
                     onPressed: () => _editItem(index),
                     icon: const Icon(Icons.edit, size: 16),
-                    label: const Text('แก้ไข'),
+                     label: const Text('แก้ไข'),
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.grey[600],
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -405,7 +417,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                   child: TextButton.icon(
                     onPressed: () => _removeItem(index),
                     icon: const Icon(Icons.delete, size: 16),
-                    label: const Text('ลบ'),
+                      label: const Text('ลบ'),
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.red,
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -421,85 +433,87 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
   }
 
   Widget _buildBottomSection() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Order Summary
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'ยอดรวมทั้งหมด',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '฿${totalAmount.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.mainOrange,
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Checkout Buttons
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => _addMoreItems(),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: AppColors.mainOrange),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: Text(
-                    'เพิ่มรายการ',
-                    style: TextStyle(
-                      color: AppColors.mainOrange,
-                      fontWeight: FontWeight.w600,
-                    ),
+    return SafeArea(
+      child: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Order Summary
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'ยอดรวมทั้งหมด',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              ),
-              
-              const SizedBox(width: 12),
-              
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: () => _proceedToCheckout(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.mainOrange,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                Text(
+                  '฿${totalAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.mainOrange,
                   ),
-                  child: Text(
-                    'สั่งซื้อ ($totalItems รายการ)',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Checkout Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _addMoreItems(),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.mainOrange),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'เพิ่มรายการ',
+                      style: TextStyle(
+                        color: AppColors.mainOrange,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                
+                const SizedBox(width: 12),
+                
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: () => _proceedToCheckout(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.mainOrange,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'ชำระเงิน ($totalItems รายการ)',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -516,7 +530,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'ไม่มีรายการอาหารในตะกร้า',
+           'ไม่มีรายการอาหารในตะกร้า',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w500,
@@ -525,7 +539,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'เพิ่มอาหารที่คุณชอบเข้าสู่ตะกร้า',
+            'กรุณาเลือกอาหารที่ต้องการสั่ง',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey[500],
@@ -542,7 +556,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
               ),
             ),
             child: const Text(
-              'เลือกอาหาร',
+               'เลือกอาหาร',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
@@ -557,30 +571,24 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
   // Cart management methods
   void _increaseQuantity(int index) {
     setState(() {
-      cartItems[index]['quantity']++;
+      _cartService.increaseQuantity(index);
     });
   }
 
   void _decreaseQuantity(int index) {
     setState(() {
-      if (cartItems[index]['quantity'] > 1) {
-        cartItems[index]['quantity']--;
-      } else {
-        _removeItem(index);
-      }
+      _cartService.decreaseQuantity(index);
     });
   }
 
   void _removeItem(int index) {
     setState(() {
-      cartItems.removeAt(index);
+      _cartService.removeFromCart(index);
     });
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('ลบรายการออกจากตะกร้าแล้ว'),
-        duration: Duration(seconds: 2),
-      ),
+    NotificationHelper.showSuccess(
+      context,
+      'ลบรายการออกจากตะกร้าแล้ว',
     );
   }
 
@@ -595,7 +603,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('ล้างตะกร้า'),
+         title: const Text('ล้างตะกร้า'),
           content: const Text('คุณต้องการลบรายการทั้งหมดในตะกร้าใช่หรือไม่?'),
           actions: [
             TextButton(
@@ -605,13 +613,12 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  cartItems.clear();
+                  _cartService.clearCart();
                 });
                 Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('ลบรายการทั้งหมดแล้ว'),
-                  ),
+                NotificationHelper.showSuccess(
+                  context,
+                  'ลบรายการทั้งหมดแล้ว',
                 );
               },
               child: const Text(
@@ -632,73 +639,18 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
   void _proceedToCheckout() {
     if (cartItems.isEmpty) return;
     
-    // Navigate to checkout screen
-    print('Proceed to checkout');
-    print('Total amount: ฿${totalAmount.toStringAsFixed(2)}');
-    print('Total items: $totalItems');
-    
-    // Navigator.push(context, MaterialPageRoute(
-    //   builder: (context) => CheckoutScreen(cartItems: cartItems),
-    // ));
-    
-    // Show confirmation dialog for demo
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('ยืนยันการสั่งซื้อ'),
-          content: Text('ยอดรวม ฿${totalAmount.toStringAsFixed(2)}\nจำนวน $totalItems รายการ'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ยกเลิก'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showOrderSuccess();
-              },
-              child: Text(
-                'ยืนยัน',
-                style: TextStyle(color: AppColors.mainOrange),
-              ),
-            ),
-          ],
-        );
-      },
+    // Navigate to Payment Screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PaymentScreen(
+          totalAmount: totalAmount,
+          itemCount: totalItems,
+          restaurantId: int.parse(_cartService.currentRestaurantId!),
+          restaurantName: _cartService.currentRestaurantName!,
+        ),
+      ),
     );
   }
 
-  void _showOrderSuccess() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 28),
-              const SizedBox(width: 8),
-              const Text('สั่งซื้อสำเร็จ!'),
-            ],
-          ),
-          content: const Text('คำสั่งซื้อของคุณได้รับการยืนยันแล้ว\nกรุณารอการเตรียมอาหาร'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() {
-                  cartItems.clear();
-                });
-              },
-              child: Text(
-                'ตกลง',
-                style: TextStyle(color: AppColors.mainOrange),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }

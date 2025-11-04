@@ -1,7 +1,9 @@
-import 'package:eatscikmitl/data/DataDemo.dart';
 import 'package:flutter/material.dart';
 import 'package:eatscikmitl/const/app_color.dart';
-import 'package:flutter/widgets.dart'; // Import your data class
+import 'package:eatscikmitl/services/supabase_service.dart';
+import 'package:eatscikmitl/services/cart_service.dart';
+import 'package:eatscikmitl/screen/FoodOrderScreen.dart';
+import '../utils/notification_helper.dart';
 
 class DetailRestaurantScreen extends StatefulWidget {
   final String restaurantId;
@@ -17,7 +19,7 @@ class DetailRestaurantScreen extends StatefulWidget {
   final int menuItemsCount;
 
   const DetailRestaurantScreen({
-    Key? key,
+    super.key,
     required this.restaurantId,
     required this.restaurantImage,
     required this.restaurantName,
@@ -29,7 +31,7 @@ class DetailRestaurantScreen extends StatefulWidget {
     required this.closeTime,
     required this.location,
     required this.menuItemsCount,
-  }) : super(key: key);
+  });
 
   @override
   State<DetailRestaurantScreen> createState() => _DetailRestaurantScreenState();
@@ -39,16 +41,80 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool isFavorite = false;
+  List<Map<String, dynamic>> menuItems = [];
+  bool isLoadingMenu = true;
+  final CartService _cartService = CartService(); // เพิ่มบรรทัดนี้
+
+  // นับเฉพาะเมนูที่พร้อมให้บริการ
+  int get availableMenuCount => menuItems.where((item) => item['isAvailable'] == true).length;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadMenuItems();
+    
+    // ฟังการเปลี่ยนแปลงของตะกร้า
+    _cartService.cartUpdateNotifier.addListener(_onCartUpdated);
+  }
+  
+  void _onCartUpdated() {
+    // Rebuild UI เมื่อตะกร้ามีการเปลี่ยนแปลง
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadMenuItems() async {
+    try {
+      setState(() {
+        isLoadingMenu = true;
+      });
+
+      final menuData = await SupabaseService.getMenuItems(int.parse(widget.restaurantId));
+      
+      setState(() {
+        menuItems = menuData.map((item) => {
+          'id': item['id']?.toString() ?? '0',
+          'name': item['name'] ?? 'ไม่มีชื่อ',
+          'description': item['description'] ?? 'ไม่มีรายละเอียด',
+          'price': double.tryParse(item['price']?.toString() ?? '0') ?? 0.0,
+          'image_url': item['image_url'] ?? '',
+          'category': item['category'] ?? 'ทั่วไป',
+          'isPopular': false, // ยังไม่มีข้อมูลนี้ใน database
+          'isAvailable': item['is_available'] ?? true,
+        }).toList();
+        isLoadingMenu = false;
+      });
+
+      // Debug logging สำหรับดู URL รูปภาพและสถานะ
+      for (var item in menuItems) {
+        print('🖼️ Menu ${item['name']}: image_url = "${item['image_url']}" | Available: ${item['isAvailable']}');
+      }
+      
+      print('📊 เมนูทั้งหมด: ${menuItems.length} รายการ | เมนูพร้อมให้บริการ: $availableMenuCount รายการ');
+
+      print('✅ โหลดเมนูสำหรับร้าน ${widget.restaurantName} ได้ ${menuItems.length} รายการ');
+    } catch (e) {
+      print('❌ Error loading menu items: $e');
+      setState(() {
+        menuItems = [];
+        isLoadingMenu = false;
+      });
+      
+      if (mounted) {
+        NotificationHelper.showError(
+          context,
+          'ไม่สามารถโหลดเมนูอาหารได้: $e',
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _cartService.cartUpdateNotifier.removeListener(_onCartUpdated); // ลบ listener
     super.dispose();
   }
 
@@ -197,7 +263,7 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                       ),
                       child: Text(
                         widget.category,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: AppColors.mainOrange,
@@ -233,7 +299,7 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                 icon: Icons.restaurant_menu,
                 iconColor: AppColors.mainOrange,
                 title: 'เมนู',
-                value: '${widget.menuItemsCount} รายการ',
+                value: isLoadingMenu ? 'กำลังโหลด...' : '${menuItems.length} รายการ',
               ),
               const SizedBox(width: 12),
               _buildInfoCard(
@@ -424,10 +490,10 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                 fontWeight: FontWeight.normal,
                 fontSize: 14,
               ),
-              tabs: const [
-                Tab(text: 'เมนู'),
-                Tab(text: 'รีวิว'),
-                Tab(text: 'ข้อมูล'),
+              tabs: [
+                Tab(text: isLoadingMenu ? 'เมนู' : 'เมนูพร้อมให้บริการ $availableMenuCount รายการ'),
+                const Tab(text: 'รีวิว'),
+                const Tab(text: 'ข้อมูล'),
               ],
             ),
           ),
@@ -449,8 +515,13 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
   }
 
   Widget _buildMenuTab() {
-    final restaurant = DataDemo.getRestaurantById(widget.restaurantId);
-    if (restaurant == null) {
+    if (isLoadingMenu) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+    
+    if (menuItems.isEmpty) {
       return const Center(
         child: Text(
           'ไม่พบข้อมูลเมนู',
@@ -458,8 +529,6 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
         ),
       );
     }
-
-    final menuItems = restaurant['menuItems'] as List<Map<String, dynamic>>;
     
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -497,16 +566,97 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.asset(
-                    menuItem['imgUrl'],
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Icon(
-                        Icons.fastfood,
-                        color: Colors.grey[400],
-                        size: 30,
-                      );
-                    },
+                  child: Stack(
+                    children: [
+                      // รูปภาพเมนู
+                      menuItem['image_url'] != null && menuItem['image_url'].isNotEmpty
+                        ? Image.network(
+                            menuItem['image_url'],
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) {
+                                return child;
+                              }
+                              return Center(
+                                child: CircularProgressIndicator(
+                                  value: loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              print('❌ Error loading image: ${menuItem['image_url']} - $error');
+                              return Container(
+                                width: 80,
+                                height: 80,
+                                color: Colors.grey[100],
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.broken_image,
+                                      color: Colors.grey[400],
+                                      size: 24,
+                                    ),
+                                    Text(
+                                      'รูปไม่แสดง',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            width: 80,
+                            height: 80,
+                            color: Colors.grey[100],
+                            child: Icon(
+                              Icons.fastfood,
+                              color: Colors.grey[400],
+                              size: 30,
+                            ),
+                          ),
+                      
+                      // Overlay สีเทาสำหรับเมนูที่ไม่พร้อมให้บริการ
+                      if (menuItem['isAvailable'] != true)
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.block,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'ไม่พร้อม',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -520,11 +670,13 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                       children: [
                         Expanded(
                           child: Text(
-                            menuItem['foodname'],
-                            style: const TextStyle(
+                            menuItem['name'] ?? 'ไม่มีชื่อ',
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black87,
+                              color: menuItem['isAvailable'] == true 
+                                  ? Colors.black87 
+                                  : Colors.grey[500],
                             ),
                           ),
                         ),
@@ -552,7 +704,9 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                       menuItem['description'],
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey[600],
+                        color: menuItem['isAvailable'] == true 
+                            ? Colors.grey[600] 
+                            : Colors.grey[400],
                         height: 1.3,
                       ),
                       maxLines: 2,
@@ -567,25 +721,31 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.mainOrange,
+                            color: menuItem['isAvailable'] == true 
+                                ? AppColors.mainOrange 
+                                : Colors.grey[400],
                           ),
                         ),
                         Container(
                           decoration: BoxDecoration(
-                            color: AppColors.mainOrange,
+                            color: menuItem['isAvailable'] == true 
+                                ? AppColors.mainOrange 
+                                : Colors.grey[400],
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(8),
-                              onTap: () {
-                                _addToCart(menuItem);
-                              },
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              onTap: menuItem['isAvailable'] == true 
+                                  ? () {
+                                      _addToCart(menuItem);
+                                    }
+                                  : null, // Disable onTap ถ้าไม่พร้อมให้บริการ
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 child: Text(
-                                  'เพิ่ม',
+                                  menuItem['isAvailable'] == true ? 'เพิ่ม' : 'ไม่พร้อม',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,
@@ -609,17 +769,112 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
   }
 
   void _addToCart(Map<String, dynamic> menuItem) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('เพิ่ม ${menuItem['foodname']} ลงตะกร้าแล้ว'),
-        backgroundColor: AppColors.mainOrange,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        margin: const EdgeInsets.all(16),
-      ),
+    // ใช้ CartService เพื่อเพิ่มลงตะกร้าจริงๆ
+    final cartService = CartService();
+    final menuName = menuItem['name'] ?? 'เมนูนี้';
+    
+    // ⭐ ตรวจสอบว่ามีสินค้าจากร้านอื่นในตะกร้าหรือไม่
+    if (cartService.hasItemsFromDifferentRestaurant(widget.restaurantId)) {
+      // แสดง Dialog เตือนและให้เลือก
+      _showDifferentRestaurantDialog(menuItem);
+      return;
+    }
+    
+    // ถ้าเป็นร้านเดียวกัน หรือตะกร้าว่าง ให้เพิ่มได้เลย
+    cartService.addToCart(
+      menuItem,
+      widget.restaurantId,
+      widget.restaurantName,
+    );
+    
+    // แสดง notification
+    NotificationHelper.showSuccess(
+      context,
+      'เพิ่ม $menuName แล้ว',
+    );
+  }// แสดง Dialog เตือนเมื่อพยายามเพิ่มสินค้าจากร้านอื่น
+  void _showDifferentRestaurantDialog(Map<String, dynamic> menuItem) {
+    final cartService = CartService();
+    final currentRestaurant = cartService.currentRestaurantName ?? 'ร้านอื่น';
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              SizedBox(width: 8),
+              Text('สั่งอาหารจากหลายร้าน?'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'ตอนนี้ตะกร้าของคุณมีอาหารจาก "$currentRestaurant" อยู่แล้ว',
+                style: TextStyle(fontSize: 14, height: 1.5),
+              ),
+              SizedBox(height: 12),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '💡 แนะนำ:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange[800],
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'ควรสั่งอาหารจากร้านเดียวกันในแต่ละครั้ง เพื่อความสะดวกในการรับอาหารและการจัดการของร้าน',
+                      style: TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'ยกเลิก',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // ล้างตะกร้าเดิมและเพิ่มเมนูใหม่
+                cartService.clearCart();
+                cartService.addToCart(
+                  menuItem,
+                  widget.restaurantId,
+                  widget.restaurantName,
+                );
+                NotificationHelper.showSuccess(
+                  context,
+                  'ล้างตะกร้าและเพิ่ม ${menuItem['name']} แล้ว',
+                );
+              },
+              child: Text(
+                'ล้างตะกร้าและเพิ่มเมนูนี้',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -784,8 +1039,11 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
   }
 
   Widget _buildBottomBar() {
+    final totalItems = _cartService.totalItems;
+    final totalAmount = _cartService.totalAmount;
+    
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -797,60 +1055,93 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton(
-              onPressed: () {
-                // Handle order action
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('เริ่มสั่งอาหารจาก ${widget.restaurantName}'),
-                    backgroundColor: AppColors.mainOrange,
+      child: SafeArea(
+        child: ElevatedButton(
+          onPressed: totalItems > 0
+              ? () {
+                  // นำไปหน้าตะกร้าสินค้า
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const FoodOrderScreen(),
+                    ),
+                  );
+                }
+              : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: totalItems > 0 
+                ? AppColors.mainOrange 
+                : Colors.grey[300],
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: totalItems > 0 ? 2 : 0,
+            disabledBackgroundColor: Colors.grey[300],
+            disabledForegroundColor: Colors.grey[600],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // ไอคอนตะกร้า + Badge จำนวนสินค้า
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(
+                    Icons.shopping_cart,
+                    size: 24,
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.mainOrange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
+                  if (totalItems > 0)
+                    Positioned(
+                      right: -8,
+                      top: -8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 20,
+                          minHeight: 20,
+                        ),
+                        child: Text(
+                          totalItems.toString(),
+                          style: TextStyle(
+                            color: AppColors.mainOrange,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              child: const Text(
-                'สั่งอาหาร',
+              const SizedBox(width: 12),
+              Text(
+                'ดูตะกร้าสินค้า',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
+                  color: totalItems > 0 ? Colors.white : Colors.grey[600],
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.mainOrange),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              onPressed: () {
-                // Handle call action
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('เปิดแอปโทรศัพท์...'),
+              if (totalItems > 0) ...[
+                const Spacer(),
+                Text(
+                  '${totalAmount.toStringAsFixed(0)} บาท',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                );
-              },
-              icon: Icon(
-                Icons.phone,
-                color: AppColors.mainOrange,
-              ),
-              padding: const EdgeInsets.all(12),
-            ),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -864,11 +1155,25 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
   }
 
   TimeOfDay _parseTime(String timeString) {
-    final parts = timeString.split(':');
-    return TimeOfDay(
-      hour: int.parse(parts[0]),
-      minute: int.parse(parts[1]),
-    );
+    // แยกทั้ง : และ . เพื่อรองรับทั้งสองรูปแบบ
+    final parts = timeString.contains(':') 
+        ? timeString.split(':') 
+        : timeString.split('.');
+    
+    if (parts.length != 2) {
+      // ถ้าไม่สามารถแยกได้ ให้ใช้เวลาเริ่มต้น
+      return const TimeOfDay(hour: 8, minute: 0);
+    }
+    
+    try {
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (e) {
+      // ถ้า parse ไม่ได้ ให้ใช้เวลาเริ่มต้น
+      print('❌ Error parsing time: $timeString - $e');
+      return const TimeOfDay(hour: 8, minute: 0);
+    }
   }
 
   bool _isTimeInRange(TimeOfDay current, TimeOfDay start, TimeOfDay end) {

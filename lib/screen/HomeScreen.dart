@@ -1,12 +1,13 @@
 // main_screen.dart
 import 'package:eatscikmitl/widget/component/CardComponent.dart';
 import 'package:eatscikmitl/widget/component/SearchComponent.dart';
-import 'package:eatscikmitl/data/DataDemo.dart'; // Import data class
+import 'package:eatscikmitl/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:eatscikmitl/const/app_color.dart';
+import '../utils/notification_helper.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -20,10 +21,9 @@ class _HomeScreenState extends State<HomeScreen> {
   
   List<String> categories = [
     'ทั้งหมด',
-    'อาหารตามสั่ง',
-    'ก๋วยเตี๋ยว',
-    'ข้าวมันไก่',
-    'อาหารอีสาน',
+    'อาหารไทย',
+    'อาหารฝรั่ง', 
+    'อาหารญี่ปุ่น',
     'เครื่องดื่ม',
     'ของหวาน'
   ];
@@ -31,8 +31,61 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    restaurants = DataDemo.restaurants;
-    filteredRestaurants = restaurants;
+    _loadRestaurants();
+  }
+
+  // ดึงข้อมูลร้านอาหารจาก Supabase
+  Future<void> _loadRestaurants() async {
+    try {
+      print('🔄 กำลังดึงข้อมูลร้านอาหาร...');
+      final data = await SupabaseService.getRestaurants();
+      
+      // ตรวจสอบข้อมูลที่ได้รับ
+      if (data.isEmpty) {
+        print('⚠️ ไม่พบข้อมูลร้านอาหาร');
+        setState(() {
+          restaurants = [];
+          filteredRestaurants = [];
+        });
+        return;
+      }
+      
+      setState(() {
+        restaurants = data.map((restaurant) {
+          // ป้องกัน null values
+          return {
+            'restaurantId': (restaurant['id'] ?? 0).toString(),
+            'restaurantImage': restaurant['image_url'] ?? 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=300',
+            'restaurantName': restaurant['name'] ?? 'ไม่ระบุชื่อ',
+            'phone': restaurant['phone'] ?? 'ไม่ระบุ',
+            'category': restaurant['category'] ?? 'ทั่วไป',
+            'description': restaurant['description'] ?? 'ไม่มีรายละเอียด',
+            'rating': double.tryParse(restaurant['rating']?.toString() ?? '0.0') ?? 0.0,
+            'openTime': restaurant['open_time'] ?? '08:00',
+            'closeTime': restaurant['close_time'] ?? '20:00',
+            'location': restaurant['location'] ?? 'ไม่ระบุ',
+            'menuItemsCount': 0,
+          };
+        }).toList();
+        filteredRestaurants = List.from(restaurants); // สร้าง copy ใหม่
+      });
+      
+      print('✅ โหลดข้อมูลร้าน ${restaurants.length} ร้านสำเร็จ');
+    } catch (e) {
+      print('❌ Error loading restaurants: $e');
+      setState(() {
+        restaurants = [];
+        filteredRestaurants = [];
+      });
+      
+      // แสดง error ให้ user ทราบ
+      if (mounted) {
+        NotificationHelper.showError(
+          context,
+          'ไม่สามารถโหลดข้อมูลร้านอาหารได้: $e',
+        );
+      }
+    }
   }
 
   void _filterRestaurants(String query) {
@@ -168,17 +221,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemBuilder: (context, index) {
                       final restaurant = filteredRestaurants[index];
                       return CardComponent(
-                        restaurantId: restaurant['restaurantId'],
-                        restaurantImage: restaurant['restaurantImage'],
-                        restaurantName: restaurant['restaurantName'],
-                        phone: restaurant['phone'],
-                        category: restaurant['category'],
-                        description: restaurant['description'],
-                        rating: restaurant['rating'].toDouble(),
-                        openTime: restaurant['openTime'],
-                        closeTime: restaurant['closeTime'],
-                        location: restaurant['location'],
-                        menuItemsCount: restaurant['menuItems'].length,
+                        restaurantId: restaurant['restaurantId'] ?? '0',
+                        restaurantImage: restaurant['restaurantImage'] ?? '',
+                        restaurantName: restaurant['restaurantName'] ?? 'ไม่มีชื่อ',
+                        phone: restaurant['phone'] ?? 'ไม่มีเบอร์',
+                        category: restaurant['category'] ?? 'ทั่วไป',
+                        description: restaurant['description'] ?? 'ไม่มีรายละเอียด',
+                        rating: (restaurant['rating'] ?? 0.0).toDouble(),
+                        openTime: restaurant['openTime'] ?? '08:00',
+                        closeTime: restaurant['closeTime'] ?? '20:00',
+                        location: restaurant['location'] ?? 'ไม่ระบุ',
+                        menuItemsCount: restaurant['menuItemsCount'] ?? 0,
                         onTap: () {
                           // Navigate to restaurant detail
                           _navigateToRestaurantDetail(restaurant);

@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:eatscikmitl/const/app_color.dart';
+import 'package:eatscikmitl/services/supabase_service.dart';
+import 'package:eatscikmitl/rootScreen.dart';
+import 'package:eatscikmitl/dashboard/Restuarant_dashboard.dart';
+import 'package:eatscikmitl/screen/auth/SignUpScreen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../utils/notification_helper.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -29,12 +36,58 @@ class _LoginScreenState extends State<LoginScreen>
   bool _isPasswordVisible = false;
   bool _isLoading = false;
   bool _rememberMe = false;
+  
+  List<String> _savedEmails = []; // เก็บอีเมลที่เคยใช้
+  bool _showEmailDropdown = false; // แสดง dropdown
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
     _startAnimations();
+    _loadSavedEmails(); // โหลดอีเมลที่บันทึกไว้
+  }
+  
+  // โหลดอีเมลที่เคย login
+  Future<void> _loadSavedEmails() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final emails = prefs.getStringList('saved_emails') ?? [];
+      setState(() {
+        _savedEmails = emails;
+        // ถ้ามีอีเมลที่บันทึกไว้ ใส่ตัวแรกเป็นค่าเริ่มต้น
+        if (emails.isNotEmpty) {
+          _usernameController.text = emails.first;
+        }
+      });
+    } catch (e) {
+      print('❌ Error loading saved emails: $e');
+    }
+  }
+  
+  // บันทึกอีเมลหลัง login สำเร็จ
+  Future<void> _saveEmail(String email) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> emails = prefs.getStringList('saved_emails') ?? [];
+      
+      // ลบอีเมลเก่าออก (ถ้ามี) และเพิ่มกลับเป็นตัวแรก
+      emails.remove(email);
+      emails.insert(0, email);
+      
+      // เก็บสูงสุด 5 อีเมล
+      if (emails.length > 5) {
+        emails = emails.sublist(0, 5);
+      }
+      
+      await prefs.setStringList('saved_emails', emails);
+      
+      setState(() {
+        _savedEmails = emails;
+      });
+    } catch (e) {
+      print('❌ Error saving email: $e');
+    }
   }
 
   void _initializeAnimations() {
@@ -137,9 +190,11 @@ class _LoginScreenState extends State<LoginScreen>
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            child: SizedBox(
-              height: MediaQuery.of(context).size.height - 
-                     MediaQuery.of(context).padding.top,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height - 
+                          MediaQuery.of(context).padding.top,
+              ),
               child: Stack(
                 children: [
                   _buildFloatingElements(),
@@ -221,7 +276,7 @@ class _LoginScreenState extends State<LoginScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Spacer(),
+          const SizedBox(height: 60), // แทน Spacer แรก
           _buildLogo(),
           const SizedBox(height: 40),
           _buildWelcomeText(),
@@ -231,7 +286,7 @@ class _LoginScreenState extends State<LoginScreen>
           _buildLoginButton(),
           const SizedBox(height: 20),
           _buildForgotPassword(),
-          const Spacer(),
+          const SizedBox(height: 60), // แทน Spacer ท้าย
           _buildFooter(),
         ],
       ),
@@ -352,11 +407,15 @@ class _LoginScreenState extends State<LoginScreen>
               children: [
                 _buildTextField(
                   controller: _usernameController,
-                  label: 'รหัสนักศึกษา',
-                  icon: Icons.person,
+                  label: 'อีเมล',
+                  icon: Icons.email,
+                  keyboardType: TextInputType.emailAddress,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'กรุณากรอกรหัสนักศึกษา';
+                      return 'กรุณากรอกอีเมล';
+                    }
+                    if (!value.contains('@')) {
+                      return 'รูปแบบอีเมลไม่ถูกต้อง';
                     }
                     return null;
                   },
@@ -389,56 +448,149 @@ class _LoginScreenState extends State<LoginScreen>
     required String label,
     required IconData icon,
     bool isPassword = false,
+    TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: isPassword && !_isPasswordVisible,
-      validator: validator,
-      style: const TextStyle(fontSize: 16),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          color: Colors.grey[600],
-          fontSize: 14,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: controller,
+          obscureText: isPassword && !_isPasswordVisible,
+          keyboardType: keyboardType,
+          validator: validator,
+          style: const TextStyle(fontSize: 16),
+          onTap: () {
+            // แสดง dropdown เมื่อกดที่ช่อง email
+            if (!isPassword && _savedEmails.isNotEmpty) {
+              setState(() {
+                _showEmailDropdown = true;
+              });
+            }
+          },
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+            ),
+            prefixIcon: Icon(
+              icon,
+              color: AppColors.mainOrange,
+            ),
+            suffixIcon: isPassword
+                ? IconButton(
+                    icon: Icon(
+                      _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      color: Colors.grey[600],
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isPasswordVisible = !_isPasswordVisible;
+                      });
+                    },
+                  )
+                : (_savedEmails.isNotEmpty && !isPassword)
+                    ? IconButton(
+                        icon: Icon(
+                          _showEmailDropdown 
+                              ? Icons.arrow_drop_up 
+                              : Icons.arrow_drop_down,
+                          color: Colors.grey[600],
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _showEmailDropdown = !_showEmailDropdown;
+                          });
+                        },
+                      )
+                    : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.mainOrange, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            filled: true,
+            fillColor: Colors.grey[50],
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          ),
         ),
-        prefixIcon: Icon(
-          icon,
-          color: AppColors.mainOrange,
-        ),
-        suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(
-                  _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                  color: Colors.grey[600],
+        
+        // Dropdown แสดงอีเมลที่บันทึกไว้
+        if (_showEmailDropdown && _savedEmails.isNotEmpty && !isPassword)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
-                onPressed: () {
-                  setState(() {
-                    _isPasswordVisible = !_isPasswordVisible;
-                  });
-                },
-              )
-            : null,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.mainOrange, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red),
-        ),
-        filled: true,
-        fillColor: Colors.grey[50],
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      ),
+              ],
+            ),
+            child: Column(
+              children: _savedEmails.map((email) {
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      controller.text = email;
+                      _showEmailDropdown = false;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.grey[200]!,
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.history,
+                          size: 18,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            email,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 14,
+                          color: Colors.grey[400],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
     );
   }
 
@@ -509,16 +661,53 @@ class _LoginScreenState extends State<LoginScreen>
   Widget _buildForgotPassword() {
     return FadeTransition(
       opacity: _fadeAnimation,
-      child: TextButton(
-        onPressed: _handleForgotPassword,
-        child: const Text(
-          'ลืมรหัสผ่าน?',
-          style: TextStyle(
-            color: AppColors.mainOrange,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
+      child: Column(
+        children: [
+          // ปุ่มสมัครสมาชิก
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'ยังไม่มีบัญชี? ',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SignUpScreen(),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'สมัครสมาชิก',
+                  style: TextStyle(
+                    color: AppColors.mainOrange,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
+          const SizedBox(height: 8),
+          // ปุ่มลืมรหัสผ่าน
+          TextButton(
+            onPressed: _handleForgotPassword,
+            child: const Text(
+              'ลืมรหัสผ่าน?',
+              style: TextStyle(
+                color: AppColors.mainOrange,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -558,90 +747,102 @@ class _LoginScreenState extends State<LoginScreen>
       _isLoading = true;
     });
 
-    // Simulate API call
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final email = _usernameController.text.trim();
+      final password = _passwordController.text;
 
-    setState(() {
-      _isLoading = false;
-    });
+      print('🔐 กำลัง login ด้วย email: $email');
 
+      // Login ด้วย Supabase Auth
+      final response = await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
 
+      if (response.user != null) {
+        print('✅ Login สำเร็จ! User ID: ${response.user!.id}');
+        print('📧 Email: ${response.user!.email}');
+        
+        // บันทึกอีเมลที่ login สำเร็จ
+        await _saveEmail(email);
 
-    //demo
-    // Check credentials (demo)
-    if (_usernameController.text == '65070001' && 
-        _passwordController.text == 'password123') {
-      
-      // Success animation
-      _showSuccessDialog();
-    } else {
-      // Error feedback
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('รหัสนักศึกษาหรือรหัสผ่านไม่ถูกต้อง'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
+        // ตรวจสอบ email domain
+        if (email.endsWith('@kmitl.ac.th')) {
+          // นักศึกษา KMITL
+          print('👨‍🎓 นักศึกษา KMITL - StreamBuilder จะนำไปหน้า Student App อัตโนมัติ');
+        } else {
+          // ร้านค้า - หา restaurant_id จาก owner_id
+          print('🏪 ร้านค้า - กำลังหา restaurant_id...');
+          final restaurants = await SupabaseService.getRestaurants();
+          final myRestaurant = restaurants.firstWhere(
+            (r) => r['owner_id'] == response.user!.id,
+            orElse: () => {},
+          );
+          
+          if (myRestaurant.isEmpty) {
+            // ไม่พบร้านที่เชื่อมกับ owner_id นี้
+            setState(() {
+              _isLoading = false;
+            });
+            NotificationHelper.showError(
+              context,
+              'ไม่พบร้านอาหารที่เชื่อมกับบัญชีนี้\nกรุณาติดต่อผู้ดูแลระบบ',
+            );
+            return;
+          }
+          
+          print('✅ พบร้าน: ${myRestaurant['name']} (ID: ${myRestaurant['id']})');
+          print('StreamBuilder จะนำไปหน้า Restaurant Dashboard อัตโนมัติ');
+        }
+        
+        // ปิด loading และให้ StreamBuilder ใน main.dart จัดการ navigation
+        setState(() {
+          _isLoading = false;
+        });
+        
+        // แสดง SnackBar สั้นๆ เพื่อ feedback
+        if (mounted) {
+          NotificationHelper.showSuccess(
+            context,
+            email.endsWith('@kmitl.ac.th') 
+              ? 'เข้าสู่ระบบสำเร็จ (นักศึกษา)' 
+              : 'เข้าสู่ระบบสำเร็จ (ร้านค้า)',
+          );
+        }
+      }
+    } on AuthException catch (e) {
+      print('❌ Auth Error: ${e.message}');
+      setState(() {
+        _isLoading = false;
+      });
+
+      String errorMessage = 'เกิดข้อผิดพลาด';
+      if (e.message.contains('Invalid login credentials')) {
+        errorMessage = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+      } else if (e.message.contains('Email not confirmed')) {
+        errorMessage = 'กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ';
+      } else {
+        errorMessage = e.message;
+      }
+
+      NotificationHelper.showError(
+        context,
+        errorMessage,
+      );
+    } catch (e) {
+      print('❌ Error: $e');
+      setState(() {
+        _isLoading = false;
+      });
+
+      NotificationHelper.showError(
+        context,
+        'เกิดข้อผิดพลาดในการเข้าสู่ระบบ',
       );
     }
   }
 
 
-
-
-
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_circle,
-                color: Colors.green,
-                size: 50,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'เข้าสู่ระบบสำเร็จ!',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'กำลังเข้าสู่แอปพลิเคชัน...',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    // Navigate to main app after delay
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.of(context).pop(); // Close dialog
-      // Navigate to main screen
-      print('Navigate to main app');
-    });
-  }
 
   void _handleForgotPassword() {
     showDialog(
