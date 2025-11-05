@@ -17,6 +17,8 @@ class DetailRestaurantScreen extends StatefulWidget {
   final String closeTime;
   final String location;
   final int menuItemsCount;
+  // Authoritative open/closed flag from DB. If null, fall back to time parsing.
+  final bool? isOpenFromDb;
 
   const DetailRestaurantScreen({
     super.key,
@@ -31,6 +33,7 @@ class DetailRestaurantScreen extends StatefulWidget {
     required this.closeTime,
     required this.location,
     required this.menuItemsCount,
+    this.isOpenFromDb,
   });
 
   @override
@@ -51,7 +54,7 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _loadMenuItems();
     
     // ฟังการเปลี่ยนแปลงของตะกร้า
@@ -195,13 +198,32 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
             color: Colors.grey[200],
           ),
           child: widget.restaurantImage.isNotEmpty
-              ? Image.asset(
-                  widget.restaurantImage,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return _buildPlaceholderImage();
-                  },
-                )
+              ? (widget.restaurantImage.toLowerCase().startsWith('http')
+                  ? Image.network(
+                      widget.restaurantImage,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                                : null,
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildPlaceholderImage();
+                      },
+                    )
+                  : Image.asset(
+                      widget.restaurantImage,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildPlaceholderImage();
+                      },
+                    ))
               : _buildPlaceholderImage(),
         ),
       ),
@@ -288,12 +310,6 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
           const SizedBox(height: 16),
           Row(
             children: [
-              _buildInfoCard(
-                icon: Icons.star,
-                iconColor: Colors.amber,
-                title: 'คะแนน',
-                value: widget.rating.toStringAsFixed(1),
-              ),
               const SizedBox(width: 12),
               _buildInfoCard(
                 icon: Icons.restaurant_menu,
@@ -492,7 +508,6 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
               ),
               tabs: [
                 Tab(text: isLoadingMenu ? 'เมนู' : 'เมนูพร้อมให้บริการ $availableMenuCount รายการ'),
-                const Tab(text: 'รีวิว'),
                 const Tab(text: 'ข้อมูล'),
               ],
             ),
@@ -504,7 +519,6 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
               controller: _tabController,
               children: [
                 _buildMenuTab(),
-                _buildReviewTab(),
                 _buildInfoTab(),
               ],
             ),
@@ -530,6 +544,10 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
       );
     }
     
+    final bool restaurantOpen = _isRestaurantOpen();
+
+    // If the restaurant is closed, menu items remain visible but add buttons
+    // will be disabled and show a message when tapped.
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       itemCount: menuItems.length,
@@ -737,15 +755,25 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                             color: Colors.transparent,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(8),
-                              onTap: menuItem['isAvailable'] == true 
-                                  ? () {
-                                      _addToCart(menuItem);
-                                    }
+                              onTap: menuItem['isAvailable'] == true
+                                  ? (restaurantOpen
+                                      ? () {
+                                          _addToCart(menuItem);
+                                        }
+                                      : () {
+                                          // Provide feedback if restaurant is closed
+                                          NotificationHelper.showWarning(
+                                            context,
+                                            'ร้านปิดอยู่ ขณะนี้ไม่สามารถสั่งอาหารได้',
+                                          );
+                                        })
                                   : null, // Disable onTap ถ้าไม่พร้อมให้บริการ
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 child: Text(
-                                  menuItem['isAvailable'] == true ? 'เพิ่ม' : 'ไม่พร้อม',
+                                  menuItem['isAvailable'] == true
+                                      ? (restaurantOpen ? 'เพิ่ม' : 'ร้านปิด')
+                                      : 'ไม่พร้อม',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,
@@ -801,48 +829,10 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-              SizedBox(width: 8),
-              Text('สั่งอาหารจากหลายร้าน?'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'ตอนนี้ตะกร้าของคุณมีอาหารจาก "$currentRestaurant" อยู่แล้ว',
-                style: TextStyle(fontSize: 14, height: 1.5),
-              ),
-              SizedBox(height: 12),
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '💡 แนะนำ:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange[800],
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'ควรสั่งอาหารจากร้านเดียวกันในแต่ละครั้ง เพื่อความสะดวกในการรับอาหารและการจัดการของร้าน',
-                      style: TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          title: const Text('สั่งอาหารจากหลายร้าน?'),
+          content: Text(
+            'ตะกร้ามีรายการจาก "$currentRestaurant" อยู่แล้ว\nต้องการล้างตะกร้าและเพิ่มเมนูนี้ไหม?',
+            style: TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
           ),
           actions: [
             TextButton(
@@ -878,85 +868,7 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
     );
   }
 
-  Widget _buildReviewTab() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: 5,
-      itemBuilder: (context, index) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[200]!),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppColors.mainOrange,
-                    child: Text(
-                      'U${index + 1}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ผู้ใช้ ${index + 1}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Row(
-                          children: List.generate(5, (starIndex) {
-                            return Icon(
-                              Icons.star,
-                              size: 14,
-                              color: starIndex < (4 - index % 2)
-                                  ? Colors.amber
-                                  : Colors.grey[300],
-                            );
-                          }),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    '2 วันที่แล้ว',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'อาหารอร่อยมาก บริการดี บรรยากาศเยี่ยม แนะนำให้มาลอง!',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[700],
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+  
 
   Widget _buildInfoTab() {
     return Padding(
@@ -1041,7 +953,8 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
   Widget _buildBottomBar() {
     final totalItems = _cartService.totalItems;
     final totalAmount = _cartService.totalAmount;
-    
+    final bool restaurantOpen = _isRestaurantOpen();
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1057,7 +970,7 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
       ),
       child: SafeArea(
         child: ElevatedButton(
-          onPressed: totalItems > 0
+          onPressed: totalItems > 0 && restaurantOpen
               ? () {
                   // นำไปหน้าตะกร้าสินค้า
                   Navigator.push(
@@ -1067,17 +980,25 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                     ),
                   );
                 }
-              : null,
+              : () {
+                  // If there are items but restaurant is closed, inform the user.
+                  if (totalItems > 0 && !restaurantOpen) {
+                    NotificationHelper.showWarning(
+                      context,
+                      'ร้านปิดอยู่ ขณะนี้ไม่สามารถชำระหรือสั่งอาหารได้',
+                    );
+                  }
+                },
           style: ElevatedButton.styleFrom(
-            backgroundColor: totalItems > 0 
-                ? AppColors.mainOrange 
+            backgroundColor: totalItems > 0 && restaurantOpen
+                ? AppColors.mainOrange
                 : Colors.grey[300],
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            elevation: totalItems > 0 ? 2 : 0,
+            elevation: totalItems > 0 && restaurantOpen ? 2 : 0,
             disabledBackgroundColor: Colors.grey[300],
             disabledForegroundColor: Colors.grey[600],
           ),
@@ -1125,7 +1046,7 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: totalItems > 0 ? Colors.white : Colors.grey[600],
+                  color: totalItems > 0 && restaurantOpen ? Colors.white : Colors.grey[600],
                 ),
               ),
               if (totalItems > 0) ...[
@@ -1147,10 +1068,15 @@ class _DetailRestaurantScreenState extends State<DetailRestaurantScreen>
   }
 
   bool _isRestaurantOpen() {
+    // Prefer authoritative DB flag when available
+    if (widget.isOpenFromDb != null) {
+      return widget.isOpenFromDb!;
+    }
+
     final now = TimeOfDay.now();
     final openTimeOfDay = _parseTime(widget.openTime);
     final closeTimeOfDay = _parseTime(widget.closeTime);
-    
+
     return _isTimeInRange(now, openTimeOfDay, closeTimeOfDay);
   }
 

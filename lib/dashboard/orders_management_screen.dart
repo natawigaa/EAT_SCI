@@ -98,9 +98,9 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: Colors.transparent, // โปร่งใส เพื่อให้ ClipRRect ทำงาน
+        backgroundColor: Colors.transparent,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12), // ขอบมนทั้ง 4 มุม
+          borderRadius: BorderRadius.circular(12),
           child: Container(
             constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
             color: Colors.white,
@@ -109,285 +109,183 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> {
                 // Header
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.mainOrange,
-                  ),
+                  decoration: BoxDecoration(color: AppColors.mainOrange),
                   child: Row(
                     children: [
                       const Icon(Icons.receipt_long, color: Colors.white),
                       const SizedBox(width: 8),
                       Text(
-                      'Order #${order['id']}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                        'Order #${order['id']}',
+                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              
-              // Content - พื้นหลังสีขาว
-              Expanded(
-                child: Container(
-                  color: Colors.white, // พื้นหลังสีขาว
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ข้อมูลลูกค้า
-                        _buildInfoSection('ข้อมูลลูกค้า', [
-                          _buildInfoRow('Student ID', order['student_id']?.toString() ?? '-'),
-                          if (order['customer_phone'] != null)
-                            _buildInfoRow('เบอร์โทร', order['customer_phone']),
-                          _buildInfoRow('เวลาสั่ง', _formatDateTime(order['created_at'])),
-                        ]),
-                        const Divider(height: 32),
-                        
-                        // รายการอาหาร
-                        _buildInfoSection('รายการอาหาร', [
-                          ...(order['items'] as List? ?? []).map((item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '${item['menu_name']}',
-                                    style: const TextStyle(fontSize: 16),
-                                  ),
-                                ),
-                                Text(
-                                  'x${item['quantity']}',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Text(
-                                  '฿${(item['price'] * item['quantity']).toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )).toList(),
-                        ]),
-                        const Divider(height: 32),
-                      
-                      // ยอดรวม
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                // Content
+                Expanded(
+                  child: Container(
+                    color: Colors.white,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'ยอดรวมทั้งหมด',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '฿${order['total_amount']?.toStringAsFixed(0) ?? '0'}',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.mainOrange,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Timeline สถานะ (Phase 3)
-                      _buildStatusTimeline(order),
-                      const SizedBox(height: 24),
-                      
-                      // ปุ่มจัดการสถานะ (Phase 3)
-                      _buildStatusActions(order),
-                      const SizedBox(height: 24),
-                      
-                      // สลิปการโอนเงิน - Uber-style Card
-                      if (order['payment_slip_url'] != null) ...[
-                        const Text(
-                          'หลักฐานการชำระเงิน',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Material(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          elevation: 2, // เงาเบาๆ
-                          shadowColor: Colors.black.withOpacity(0.1),
-                          child: InkWell(
-                            onTap: () {
-                              // Debug: แสดง URL
-                              print('🖼️ กำลังเปิดสลิป URL: ${order['payment_slip_url']}');
-                              
-                              // แสดงรูปสลิปในกรอบที่มีขนาดและขอบมนเหมือน Dialog รายละเอียดออเดอร์
-                              showDialog(
-                                context: context,
-                                builder: (context) => Dialog(
-                                  backgroundColor: Colors.transparent,
-                                  insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Container(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 500,
-                                        maxHeight: 700,
-                                      ),
-                                      color: Colors.black,
-                                      child: Stack(
-                                        children: [
-                                          // รูปสลิป
-                                          Center(
-                                            child: InteractiveViewer(
-                                              child: Image.network(
-                                                order['payment_slip_url'],
-                                                fit: BoxFit.contain,
-                                                loadingBuilder: (context, child, progress) {
-                                                  if (progress == null) return child;
-                                                  return const Center(
-                                                    child: CircularProgressIndicator(
-                                                      color: Colors.white,
-                                                    ),
-                                                  );
-                                                },
-                                                errorBuilder: (context, error, stack) {
-                                                  print('❌ Error loading image: $error');
-                                                  print('📍 Stack trace: $stack');
-                                                  return Container(
-                                                    color: Colors.grey[900],
-                                                    alignment: Alignment.center,
-                                                    child: Column(
-                                                      mainAxisAlignment: MainAxisAlignment.center,
-                                                      children: [
-                                                        const Icon(Icons.error_outline, size: 64, color: Colors.white),
-                                                        const SizedBox(height: 16),
-                                                        const Text(
-                                                          'ไม่สามารถโหลดรูปสลิปได้',
-                                                          style: TextStyle(color: Colors.white, fontSize: 16),
-                                                        ),
-                                                        const SizedBox(height: 8),
-                                                        Padding(
-                                                          padding: const EdgeInsets.all(16.0),
-                                                          child: Text(
-                                                            'URL: ${order['payment_slip_url']}',
-                                                            style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                                            textAlign: TextAlign.center,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                          ),
-                                          // ปุ่มปิด
-                                          Positioned(
-                                            top: 16,
-                                            right: 16,
-                                            child: IconButton(
-                                              icon: const Icon(Icons.close, color: Colors.white, size: 32),
-                                              onPressed: () => Navigator.pop(context),
-                                              style: IconButton.styleFrom(
-                                                backgroundColor: Colors.black54,
-                                              ),
-                                            ),
+                          // ข้อมูลลูกค้า
+                          _buildInfoSection('ข้อมูลลูกค้า', [
+                            _buildInfoRow('Student ID', order['student_id']?.toString() ?? '-'),
+                            if (order['customer_phone'] != null) _buildInfoRow('เบอร์โทร', order['customer_phone']),
+                            _buildInfoRow('เวลาสั่ง', _formatDateTime(order['created_at'])),
+                          ]),
+                          const Divider(height: 32),
+
+                          // รายการอาหาร
+                          _buildInfoSection('รายการอาหาร', [
+                            // แสดงแต่ละเมนู พร้อมคำขอพิเศษ (ถ้ามี)
+                            ...(order['items'] as List? ?? []).map((item) {
+                                  final special = (item['special_request'] ?? item['specialRequest'] ?? '').toString();
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(child: Text('${item['menu_name']}', style: const TextStyle(fontSize: 16))),
+                                            Text('x${item['quantity']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                            const SizedBox(width: 16),
+                                            Text('฿${( (item['price'] ?? 0) * (item['quantity'] ?? 1) ).toStringAsFixed(0)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                        if (special.trim().isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'คำขอพิเศษ: $special',
+                                            style: TextStyle(fontSize: 13, color: Colors.blue[700]),
                                           ),
                                         ],
-                                      ),
+                                      ],
                                     ),
-                                  ),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  // Icon ทางซ้าย
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[100],
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Icon(
-                                      Icons.receipt_outlined,
-                                      color: Colors.grey[700],
-                                      size: 22,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  // ข้อความ
-                                  Expanded(
-                                    child: Text(
-                                      'ดูสลิปการโอนเงิน',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: Colors.grey[900],
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                  // Arrow ขวา
-                                  Icon(
-                                    Icons.chevron_right,
-                                    color: Colors.grey[400],
-                                    size: 24,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ] else ...[
-                        // กรณีไม่มีสลิป
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey[200]!, width: 1),
-                          ),
-                          child: Row(
+                                  );
+                                }).toList(),
+                          ]),
+                          const Divider(height: 32),
+
+                          // ยอดรวม
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Icon(Icons.info_outline, color: Colors.grey[400], size: 22),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'ยังไม่ได้รับสลิปการโอนเงิน',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
+                              const Text('ยอดรวมทั้งหมด', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              Text('฿${order['total_amount']?.toStringAsFixed(0) ?? '0'}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.mainOrange)),
                             ],
                           ),
-                        ),
-                      ],
-                      ],// ปิด children ของ Column
+                          const SizedBox(height: 24),
+
+                          // Timeline สถานะ (Phase 3)
+                          _buildStatusTimeline(order),
+                          const SizedBox(height: 24),
+
+                          // สลิปการโอนเงิน - ให้แสดงก่อนปุ่มจัดการสถานะเพื่อให้ร้านค้าดูสลิปก่อนตัดสินใจ
+                          if (order['payment_slip_url'] != null) ...[
+                            const Text('หลักฐานการชำระเงิน', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 16),
+                            Material(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              elevation: 2,
+                              shadowColor: Colors.black.withOpacity(0.1),
+                              child: InkWell(
+                                onTap: () {
+                                  print('🖼️ กำลังเปิดสลิป URL: ${order['payment_slip_url']}');
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => Dialog(
+                                      backgroundColor: Colors.transparent,
+                                      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 700),
+                                          color: Colors.black,
+                                          child: Stack(
+                                            children: [
+                                              Center(
+                                                child: InteractiveViewer(
+                                                  child: Image.network(
+                                                    order['payment_slip_url'],
+                                                    fit: BoxFit.contain,
+                                                    loadingBuilder: (context, child, progress) {
+                                                      if (progress == null) return child;
+                                                      return const Center(child: CircularProgressIndicator(color: Colors.white));
+                                                    },
+                                                    errorBuilder: (context, error, stack) {
+                                                      print('❌ Error loading image: $error');
+                                                      return Container(
+                                                        color: Colors.grey[900],
+                                                        alignment: Alignment.center,
+                                                        child: Column(
+                                                          mainAxisAlignment: MainAxisAlignment.center,
+                                                          children: [
+                                                            const Icon(Icons.error_outline, size: 64, color: Colors.white),
+                                                            const SizedBox(height: 16),
+                                                            const Text('ไม่สามารถโหลดรูปสลิปได้', style: TextStyle(color: Colors.white, fontSize: 16)),
+                                                            const SizedBox(height: 8),
+                                                            Padding(padding: const EdgeInsets.all(16.0), child: Text('URL: ${order['payment_slip_url']}', style: const TextStyle(color: Colors.white70, fontSize: 12), textAlign: TextAlign.center)),
+                                                          ],
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                              ),
+                                              Positioned(
+                                                top: 16,
+                                                right: 16,
+                                                child: IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 32), onPressed: () => Navigator.pop(context), style: IconButton.styleFrom(backgroundColor: Colors.black54)),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    children: [
+                                      Container(width: 40, height: 40, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Icon(Icons.receipt_outlined, color: Colors.grey[700], size: 22)),
+                                      const SizedBox(width: 14),
+                                      Expanded(child: Text('ดูสลิปการโอนเงิน', style: TextStyle(fontSize: 15, color: Colors.grey[900], fontWeight: FontWeight.w500))),
+                                      Icon(Icons.chevron_right, color: Colors.grey[400], size: 24),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ] else ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[200]!, width: 1)),
+                              child: Row(children: [Icon(Icons.info_outline, color: Colors.grey[400], size: 22), const SizedBox(width: 12), Expanded(child: Text('ยังไม่ได้รับสลิปการโอนเงิน', style: TextStyle(color: Colors.grey[600], fontSize: 14))),]),
+                            ),
+                          ],
+
+                          const SizedBox(height: 24),
+
+                          // ปุ่มจัดการสถานะ (Phase 3) - แสดงหลังจากสลิป
+                          _buildStatusActions(order),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
               ],
             ),
           ),
@@ -506,43 +404,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> {
                 ),
               ),
               const Spacer(),
-              // Badge แสดงจำนวน order ใหม่
-              if (_newOrdersCount > 0)
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.notifications),
-                      onPressed: () {
-                        setState(() => _newOrdersCount = 0);
-                      },
-                    ),
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 20,
-                          minHeight: 20,
-                        ),
-                        child: Text(
-                          _newOrdersCount.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              // (notification bell removed)
               IconButton(
                 icon: const Icon(Icons.refresh),
                 onPressed: _loadOrders,
@@ -629,13 +491,43 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> {
                                     ),
                                     const SizedBox(height: 12),
                                     
-                                    // รายการอาหาร (แสดงแค่ชื่อ)
-                                    Text(
-                                      items.map((item) => '${item['menu_name']} x${item['quantity']}').join(', '),
-                                      style: const TextStyle(fontSize: 14),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                              // รายการอาหาร (แสดงชื่อสั้น ๆ) และไอคอนบอกว่ามีคำขอพิเศษ
+                                              Builder(builder: (context) {
+                                                final summaryText = items.map((item) => '${item['menu_name']} x${item['quantity']}').join(', ');
+                                                final hasSpecial = (items as List).any((i) {
+                                                  final s = (i['special_request'] ?? i['specialRequest'] ?? '').toString();
+                                                  return s.trim().isNotEmpty;
+                                                });
+                                                return Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        summaryText,
+                                                        style: const TextStyle(fontSize: 14),
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    if (hasSpecial) ...[
+                                                      const SizedBox(width: 8),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.orange.shade50,
+                                                          borderRadius: BorderRadius.circular(12),
+                                                        ),
+                                                        child: Row(
+                                                          children: [
+                                                            Icon(Icons.note, size: 14, color: Colors.orange.shade700),
+                                                            const SizedBox(width: 6),
+                                                            Text('มีคำขอพิเศษ', style: TextStyle(fontSize: 12, color: Colors.orange.shade700, fontWeight: FontWeight.w600)),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                );
+                                              }),
                                     const SizedBox(height: 12),
                                     
                                     // Total + Slip indicator

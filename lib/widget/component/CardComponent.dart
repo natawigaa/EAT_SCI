@@ -1,6 +1,7 @@
 import 'package:eatscikmitl/screen/DetailRestuarantScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:eatscikmitl/const/app_color.dart';
+import 'package:eatscikmitl/utils/notification_helper.dart';
 
 class CardComponent extends StatelessWidget {
   final String restaurantId;
@@ -14,6 +15,7 @@ class CardComponent extends StatelessWidget {
   final String closeTime;
   final String location;
   final int menuItemsCount;
+  final bool? isOpenFromDb;
   final VoidCallback? onTap;
 
   const CardComponent({
@@ -30,13 +32,59 @@ class CardComponent extends StatelessWidget {
     required this.location,
     required this.menuItemsCount,
     this.onTap,
+    this.isOpenFromDb,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context)=> 
-      DetailRestaurantScreen(restaurantId: restaurantId, restaurantImage: restaurantImage, restaurantName: restaurantName,phone: phone, category: category, description: description, rating: rating, openTime: openTime, closeTime: closeTime, location: location, menuItemsCount: menuItemsCount))),
+      onTap: () {
+        // Determine whether the restaurant is open. Prefer DB flag when available.
+        final now = TimeOfDay.now();
+        final openTimeOfDay = _parseTime(openTime);
+        final closeTimeOfDay = _parseTime(closeTime);
+        bool isOpen;
+        if (isOpenFromDb != null) {
+          isOpen = isOpenFromDb!;
+        } else {
+          isOpen = _isTimeInRange(now, openTimeOfDay, closeTimeOfDay);
+        }
+
+        if (!isOpen) {
+          // Show feedback using app-styled notification and prevent entering the menu when closed
+          NotificationHelper.showWarning(
+            context,
+            'ร้านปิดอยู่ ขณะนี้ไม่สามารถดูเมนูหรือสั่งอาหารได้',
+          );
+          return;
+        }
+
+        // If an onTap callback was provided by the parent, call it. Otherwise use
+        // the default navigation to the detail screen.
+        if (onTap != null) {
+          onTap!();
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DetailRestaurantScreen(
+                restaurantId: restaurantId,
+                restaurantImage: restaurantImage,
+                restaurantName: restaurantName,
+                phone: phone,
+                category: category,
+                description: description,
+                rating: rating,
+                openTime: openTime,
+                closeTime: closeTime,
+                location: location,
+                menuItemsCount: menuItemsCount,
+                isOpenFromDb: isOpenFromDb,
+              ),
+            ),
+          );
+        }
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
@@ -67,13 +115,32 @@ class CardComponent extends StatelessWidget {
                 child: restaurantImage.isNotEmpty
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.asset(
-                          restaurantImage,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return _buildPlaceholderImage();
-                          },
-                        ),
+                        child: restaurantImage.toLowerCase().startsWith('http')
+                            ? Image.network(
+                                restaurantImage,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Center(
+                                    child: CircularProgressIndicator(
+                                      value: loadingProgress.expectedTotalBytes != null
+                                          ? loadingProgress.cumulativeBytesLoaded /
+                                              loadingProgress.expectedTotalBytes!
+                                          : null,
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (context, error, stackTrace) {
+                                  return _buildPlaceholderImage();
+                                },
+                              )
+                            : Image.asset(
+                                restaurantImage,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return _buildPlaceholderImage();
+                                },
+                              ),
                       )
                     : _buildPlaceholderImage(),
               ),
@@ -123,24 +190,9 @@ class CardComponent extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    // Rating and menu count
+                    // Menu count (rating removed per user request)
                     Row(
                       children: [
-                        const Icon(
-                          Icons.star,
-                          color: Colors.amber,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          rating.toStringAsFixed(1),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         Text(
                           '• $menuItemsCount เมนู',
                           style: TextStyle(
@@ -215,11 +267,18 @@ class CardComponent extends StatelessWidget {
   }
 
   Widget _buildStatusIndicator() {
-    final now = TimeOfDay.now();
-    final openTimeOfDay = _parseTime(openTime);
-    final closeTimeOfDay = _parseTime(closeTime);
-    
-    bool isOpen = _isTimeInRange(now, openTimeOfDay, closeTimeOfDay);
+    // Prefer authoritative DB value when available, otherwise fall back to
+    // local open/close time parsing.
+    bool isOpen;
+    if (isOpenFromDb != null) {
+      isOpen = isOpenFromDb!;
+    } else {
+      final now = TimeOfDay.now();
+      final openTimeOfDay = _parseTime(openTime);
+      final closeTimeOfDay = _parseTime(closeTime);
+
+      isOpen = _isTimeInRange(now, openTimeOfDay, closeTimeOfDay);
+    }
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -374,20 +433,6 @@ class SimpleRestaurantCard extends StatelessWidget {
                             fontSize: 12,
                             color: AppColors.mainOrange,
                             fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.star,
-                          color: Colors.amber,
-                          size: 12,
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          rating.toStringAsFixed(1),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.black87,
                           ),
                         ),
                       ],

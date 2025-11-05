@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:eatscikmitl/const/app_color.dart';
 import 'package:eatscikmitl/services/supabase_service.dart';
 import 'package:eatscikmitl/rootScreen.dart';
-import 'package:eatscikmitl/dashboard/Restuarant_dashboard.dart';
+//import 'package:eatscikmitl/dashboard/Restuarant_dashboard.dart';
 import 'package:eatscikmitl/screen/auth/SignUpScreen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -658,6 +658,9 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+
+
+
   Widget _buildForgotPassword() {
     return FadeTransition(
       opacity: _fadeAnimation,
@@ -695,7 +698,6 @@ class _LoginScreenState extends State<LoginScreen>
             ],
           ),
           const SizedBox(height: 8),
-          // ปุ่มลืมรหัสผ่าน
           TextButton(
             onPressed: _handleForgotPassword,
             child: const Text(

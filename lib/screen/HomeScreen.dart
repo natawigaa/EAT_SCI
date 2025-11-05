@@ -1,5 +1,6 @@
 // main_screen.dart
 import 'package:eatscikmitl/widget/component/CardComponent.dart';
+import 'package:eatscikmitl/screen/DetailRestuarantScreen.dart';
 import 'package:eatscikmitl/widget/component/SearchComponent.dart';
 import 'package:eatscikmitl/services/supabase_service.dart';
 import 'package:flutter/material.dart';
@@ -53,6 +54,27 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         restaurants = data.map((restaurant) {
           // ป้องกัน null values
+          // Prefer integer opening_hour/closing_hour (hours 0-23) when present.
+          String formattedOpenTime() {
+            final oh = restaurant['opening_hour'];
+            if (oh != null) {
+              final int h = oh is int ? oh : int.tryParse(oh.toString()) ?? 8;
+              return '${h.toString().padLeft(2, '0')}:00';
+            }
+            // No longer use legacy `open_time` text column — rely on opening_hour (or default)
+            return '08:00';
+          }
+
+          String formattedCloseTime() {
+            final ch = restaurant['closing_hour'];
+            if (ch != null) {
+              final int h = ch is int ? ch : int.tryParse(ch.toString()) ?? 20;
+              return '${h.toString().padLeft(2, '0')}:00';
+            }
+            // No longer use legacy `close_time` text column — rely on closing_hour (or default)
+            return '20:00';
+          }
+
           return {
             'restaurantId': (restaurant['id'] ?? 0).toString(),
             'restaurantImage': restaurant['image_url'] ?? 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=300',
@@ -61,14 +83,43 @@ class _HomeScreenState extends State<HomeScreen> {
             'category': restaurant['category'] ?? 'ทั่วไป',
             'description': restaurant['description'] ?? 'ไม่มีรายละเอียด',
             'rating': double.tryParse(restaurant['rating']?.toString() ?? '0.0') ?? 0.0,
-            'openTime': restaurant['open_time'] ?? '08:00',
-            'closeTime': restaurant['close_time'] ?? '20:00',
+            // Display strings for UI; prefer opening_hour/closing_hour when provided (hours as int)
+            'openTime': formattedOpenTime(),
+            'closeTime': formattedCloseTime(),
             'location': restaurant['location'] ?? 'ไม่ระบุ',
             'menuItemsCount': 0,
+            // effective open/closed flag (compute locally from row)
+            'isOpenFromDb': _computeEffectiveIsOpenFromRow(restaurant),
           };
         }).toList();
         filteredRestaurants = List.from(restaurants); // สร้าง copy ใหม่
       });
+      // หลังจากโหลดรายการร้านแล้ว ดึงจำนวนเมนูสำหรับแต่ละร้านแบบขนาน
+      try {
+        final futures = <Future<void>>[];
+        for (int i = 0; i < restaurants.length; i++) {
+          final r = restaurants[i];
+          final id = int.tryParse(r['restaurantId']?.toString() ?? '0') ?? 0;
+          // สร้าง future ที่ดึงเมนูและอัปเดตค่าในรายการ
+          futures.add(SupabaseService.getMenuItems(id).then((menuItems) {
+            final count = menuItems.length;
+            // ป้องกัน out-of-range ถ้าร้านถูกลบไปแล้ว
+            if (i >= 0 && i < restaurants.length) {
+              restaurants[i]['menuItemsCount'] = count;
+            }
+          }).catchError((e) {
+            print('⚠️ ไม่สามารถดึงเมนูสำหรับร้าน id=$id : $e');
+          }));
+        }
+
+        // รอให้ทุกคำขอเสร็จ แล้วอัปเดตสถานะหนึ่งครั้ง
+        await Future.wait(futures);
+        setState(() {
+          filteredRestaurants = List.from(restaurants);
+        });
+      } catch (e) {
+        print('⚠️ Error updating menu counts: $e');
+      }
       
       print('✅ โหลดข้อมูลร้าน ${restaurants.length} ร้านสำเร็จ');
     } catch (e) {
@@ -85,6 +136,41 @@ class _HomeScreenState extends State<HomeScreen> {
           'ไม่สามารถโหลดข้อมูลร้านอาหารได้: $e',
         );
       }
+    }
+  }
+
+  // Compute effective is_open from a restaurant row without extra network calls.
+  // Follows the same precedence as SupabaseService.getRestaurantEffectiveIsOpen:
+  // 1) if is_open_manual == true -> use stored is_open (manual persists)
+  // 2) else if opening_hour/closing_hour present -> compute schedule-based
+  // 3) fallback to stored is_open
+  bool _computeEffectiveIsOpenFromRow(Map<String, dynamic> restaurant) {
+    try {
+      final bool storedIsOpen = restaurant['is_open'] == true;
+      final bool isManual = restaurant['is_open_manual'] == true;
+
+      if (isManual) return storedIsOpen;
+
+      if (restaurant.containsKey('opening_hour') && restaurant.containsKey('closing_hour') && restaurant['opening_hour'] != null && restaurant['closing_hour'] != null) {
+        final openingRaw = restaurant['opening_hour'];
+        final closingRaw = restaurant['closing_hour'];
+        final int opening = openingRaw is int ? openingRaw : int.tryParse(openingRaw.toString()) ?? 0;
+        final int closing = closingRaw is int ? closingRaw : int.tryParse(closingRaw.toString()) ?? 23;
+
+        final nowLocal = DateTime.now();
+        final hour = nowLocal.hour;
+        bool isOpenBySchedule;
+        if (opening <= closing) {
+          isOpenBySchedule = hour >= opening && hour <= closing;
+        } else {
+          isOpenBySchedule = hour >= opening || hour <= closing;
+        }
+        return isOpenBySchedule;
+      }
+
+      return storedIsOpen;
+    } catch (e) {
+      return true; // default safe option
     }
   }
 
@@ -133,12 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.menu, color: Colors.black),
-            onPressed: () {},
-          ),
-        ],
+        actions: [],
       ),
       body: Column(
         children: [
@@ -232,6 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         closeTime: restaurant['closeTime'] ?? '20:00',
                         location: restaurant['location'] ?? 'ไม่ระบุ',
                         menuItemsCount: restaurant['menuItemsCount'] ?? 0,
+                        isOpenFromDb: restaurant['isOpenFromDb'],
                         onTap: () {
                           // Navigate to restaurant detail
                           _navigateToRestaurantDetail(restaurant);
@@ -307,14 +389,26 @@ class _HomeScreenState extends State<HomeScreen> {
     print('Navigate to ${restaurant['restaurantName']}');
     print('Restaurant ID: ${restaurant['restaurantId']}');
     
-    // Example: Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (context) => RestaurantDetailScreen(
-    //       restaurantData: restaurant,
-    //     ),
-    //   ),
-    // );
+    // Navigate to the detail screen with the mapped fields
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DetailRestaurantScreen(
+          restaurantId: restaurant['restaurantId'] ?? '0',
+          restaurantImage: restaurant['restaurantImage'] ?? '',
+          restaurantName: restaurant['restaurantName'] ?? 'ไม่มีชื่อ',
+          phone: restaurant['phone'] ?? 'ไม่มีเบอร์',
+          category: restaurant['category'] ?? 'ทั่วไป',
+          description: restaurant['description'] ?? 'ไม่มีรายละเอียด',
+          rating: (restaurant['rating'] ?? 0.0).toDouble(),
+          openTime: restaurant['openTime'] ?? '08:00',
+          closeTime: restaurant['closeTime'] ?? '20:00',
+          location: restaurant['location'] ?? 'ไม่ระบุ',
+              menuItemsCount: restaurant['menuItemsCount'] ?? 0,
+              isOpenFromDb: restaurant['isOpenFromDb'],
+        ),
+      ),
+    );
   }
 
   @override

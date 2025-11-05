@@ -31,14 +31,26 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   bool _isDescending = true;
   bool _isLoading = true;
   List<Map<String, dynamic>> _peakHours = [];
+  int? _businessOpeningHour;
+  int? _businessClosingHour;
   Map<String, dynamic> _processingTime = {};
   Map<String, dynamic> _previousProcessingTime = {};
+  Map<String, dynamic> _periodComparison = {};
   List<Map<String, dynamic>> _topMenus = [];
   String _selectedStatus = 'completed';
-  String _selectedPeriod = 'week';
+  // default period set to today to match other report tabs
+  String _selectedPeriod = 'today';
   DateTime? _customStartDate;
   DateTime? _customEndDate;
   final List<String> _statusOptions = ['completed', 'ready', 'pending', 'confirmed', 'preparing'];
+  // Thai labels for status dropdown
+  final Map<String, String> _statusLabels = {
+    'completed': 'เสร็จสิ้น',
+    'ready': 'พร้อมรับ',
+    'pending': 'รอดำเนินการ',
+    'confirmed': 'ยืนยัน',
+    'preparing': 'กำลังทำ',
+  };
   final List<String> _periodOptions = ['today', 'week', 'month', 'custom'];
 
   @override
@@ -50,51 +62,67 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      int days;
+      // Compute requested period range (used for Top Menus). However, Peak Hours
+      // and Average Processing Time should always use today's data per request.
+      int daysForTopMenus;
       DateTime? startDate;
       DateTime? endDate;
+
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayEnd = todayStart.add(const Duration(days: 1));
+
       if (_selectedPeriod == 'custom' && _customStartDate != null && _customEndDate != null) {
-        days = _customEndDate!.difference(_customStartDate!).inDays + 1;
-        if (days < 1) days = 1;
+        daysForTopMenus = _customEndDate!.difference(_customStartDate!).inDays + 1;
+        if (daysForTopMenus < 1) daysForTopMenus = 1;
         // set startDate to 00:00:00 of custom start, endDate to 00:00:00 of day after custom end
         startDate = DateTime(_customStartDate!.year, _customStartDate!.month, _customStartDate!.day);
         endDate = DateTime(_customEndDate!.year, _customEndDate!.month, _customEndDate!.day).add(const Duration(days: 1));
       } else {
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
+        final today = todayStart;
         if (_selectedPeriod == 'today') {
-          days = 1;
+          daysForTopMenus = 1;
           startDate = today;
           endDate = today.add(const Duration(days: 1));
         } else if (_selectedPeriod == 'week') {
-          days = 7;
+          daysForTopMenus = 7;
           startDate = today.subtract(const Duration(days: 6));
           endDate = today.add(const Duration(days: 1));
         } else if (_selectedPeriod == 'month') {
-          days = 30;
+          daysForTopMenus = 30;
           startDate = today.subtract(const Duration(days: 29));
           endDate = today.add(const Duration(days: 1));
         } else {
-          days = 7;
+          daysForTopMenus = 7;
           startDate = today.subtract(const Duration(days: 6));
           endDate = today.add(const Duration(days: 1));
         }
       }
+
+      // Use today's data for peak hours and average processing time
       final results = await Future.wait([
-        // use business-hours-aware peak hours so x-axis = opening..closing
-        SupabaseService.getPeakHoursWithBusinessHours(widget.restaurantId, days: days),
-        SupabaseService.getAverageProcessingTime(widget.restaurantId),
+  // peak hours always for today (now returns a Map with peak_hours + business hours)
+  SupabaseService.getPeakHoursWithBusinessHours(widget.restaurantId, days: 1),
+        // average processing time for today only
+        SupabaseService.getAverageProcessingTime(widget.restaurantId, startDate: todayStart, endDate: todayEnd),
+        // Top menus use the selected period's start/end
         SupabaseService.getTopMenus(
           widget.restaurantId,
           startDate: startDate,
           endDate: endDate,
           limit: 5,
         ),
+        // Compare today's revenue vs yesterday
+        SupabaseService.getPeriodComparison(widget.restaurantId, 'today'),
       ]);
       setState(() {
-        _peakHours = results[0] as List<Map<String, dynamic>>;
+  final peakResult = results[0] as Map<String, dynamic>;
+  _peakHours = List<Map<String, dynamic>>.from(peakResult['peak_hours'] ?? []);
+  _businessOpeningHour = peakResult['opening_hour'] is int ? peakResult['opening_hour'] as int : int.tryParse(peakResult['opening_hour']?.toString() ?? '') ;
+  _businessClosingHour = peakResult['closing_hour'] is int ? peakResult['closing_hour'] as int : int.tryParse(peakResult['closing_hour']?.toString() ?? '');
         _processingTime = results[1] as Map<String, dynamic>;
         _topMenus = results[2] as List<Map<String, dynamic>>;
+        _periodComparison = results[3] as Map<String, dynamic>;
         _previousProcessingTime = {
           'total_minutes': (_processingTime['total_minutes'] ?? 0.0) * 1.15,
           'sample_size': (_processingTime['sample_size'] ?? 0) - 5,
@@ -254,6 +282,10 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Peak Time (จำนวนออเดอร์แต่ละชั่วโมง)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 6),
+          // Show inferred business hours when available
+          if (_businessOpeningHour != null && _businessClosingHour != null)
+            Text('เวลาเปิด-ปิดร้าน: ${_businessOpeningHour!.toString().padLeft(2, '0')}:00 - ${_businessClosingHour!.toString().padLeft(2, '0')}:00', style: TextStyle(color: Colors.grey[700])),
           const SizedBox(height: 16),
           SizedBox(
             height: 250,
@@ -456,53 +488,75 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
           ],
         ),
         const SizedBox(height: 24),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+        // Split the detailed segment times into three small cards for clarity
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Pending → Confirmed', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800])),
+                    const SizedBox(height: 8),
+                    Row(children: [Icon(Icons.arrow_right_alt, color: Colors.blue, size: 18), const SizedBox(width: 8), Text('${(_processingTime['pending_to_confirmed_minutes'] ?? 0.0).toStringAsFixed(1)} นาที', style: const TextStyle(fontWeight: FontWeight.bold))]),
+                  ],
+                ),
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('รายละเอียดเวลาเฉลี่ยแต่ละช่วงสถานะ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.arrow_right_alt, color: Colors.blue, size: 20),
-                  const SizedBox(width: 4),
-                  const Text('Pending → Confirmed: ', style: TextStyle(fontSize: 14)),
-                  Text('${(_processingTime['pending_to_confirmed_minutes'] ?? 0.0).toStringAsFixed(1)} นาที', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Confirmed → Preparing', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800])),
+                    const SizedBox(height: 8),
+                    Row(children: [Icon(Icons.arrow_right_alt, color: Colors.orange, size: 18), const SizedBox(width: 8), Text('${(_processingTime['confirmed_to_preparing_minutes'] ?? 0.0).toStringAsFixed(1)} นาที', style: const TextStyle(fontWeight: FontWeight.bold))]),
+                  ],
+                ),
               ),
-              Row(
-                children: [
-                  Icon(Icons.arrow_right_alt, color: Colors.orange, size: 20),
-                  const SizedBox(width: 4),
-                  const Text('Confirmed → Preparing: ', style: TextStyle(fontSize: 14)),
-                  Text('${(_processingTime['confirmed_to_preparing_minutes'] ?? 0.0).toStringAsFixed(1)} นาที', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Preparing → Ready', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800])),
+                    const SizedBox(height: 8),
+                    Row(children: [Icon(Icons.arrow_right_alt, color: Colors.green, size: 18), const SizedBox(width: 8), Text('${(_processingTime['preparing_to_ready_minutes'] ?? 0.0).toStringAsFixed(1)} นาที', style: const TextStyle(fontWeight: FontWeight.bold))]),
+                  ],
+                ),
               ),
-              Row(
-                children: [
-                  Icon(Icons.arrow_right_alt, color: Colors.green, size: 20),
-                  const SizedBox(width: 4),
-                  const Text('Preparing → Ready: ', style: TextStyle(fontSize: 14)),
-                  Text('${(_processingTime['preparing_to_ready_minutes'] ?? 0.0).toStringAsFixed(1)} นาที', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
         const SizedBox(height: 24),
+        // Replace the average-time card with a revenue comparison card (today vs yesterday)
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),
@@ -520,8 +574,8 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
           child: Row(
             children: [
               Icon(
-                avgChange <= 0 ? Icons.trending_down : Icons.trending_up,
-                color: avgChange <= 0 ? Colors.green : Colors.orange,
+                (_periodComparison['revenue_change_percent'] ?? 0.0) <= 0 ? Icons.trending_down : Icons.trending_up,
+                color: (_periodComparison['revenue_change_percent'] ?? 0.0) <= 0 ? Colors.green : Colors.orange,
                 size: 32,
               ),
               const SizedBox(width: 12),
@@ -529,34 +583,20 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const Text('การเปรียบเทียบยอดขายรายวัน', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
                     Text(
-                      'เวลาเฉลี่ย: ${currentAvg.toStringAsFixed(1)} นาที/ออเดอร์',
+                      '${((_periodComparison['revenue_change_percent'] ?? 0.0) >= 0 ? '+' : '')}${(_periodComparison['revenue_change_percent'] ?? 0.0).toStringAsFixed(1)}% ',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: avgChange <= 0 ? Colors.green[900] : Colors.orange[900],
+                        color: (_periodComparison['revenue_change_percent'] ?? 0.0) <= 0 ? Colors.green[900] : Colors.orange[900],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          '${avgChange <= 0 ? '' : '+'}${avgChange.toStringAsFixed(1)}% จากสัปดาห์ก่อน',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: avgChange <= 0 ? Colors.green[700] : Colors.red[700],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          avgChange <= 0 ? '(เร็วขึ้น ✓)' : '(ช้าลง)',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 6),
+                    Text(
+                      'วันนี้: ฿${((_periodComparison['current_revenue'] ?? 0.0)).toStringAsFixed(2)} • เมื่อวาน: ฿${((_periodComparison['previous_revenue'] ?? 0.0)).toStringAsFixed(2)}',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                     ),
                   ],
                 ),
@@ -614,7 +654,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                 items: _statusOptions
                     .map((status) => DropdownMenuItem(
                           value: status,
-                          child: Text(status == 'all' ? 'ทุกสถานะ' : status),
+                          child: Text(_statusLabels[status] ?? status),
                         ))
                     .toList(),
                 onChanged: (value) {
@@ -698,6 +738,14 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         filterSection,
+        // Title for the Top Menus table
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Text(
+            'เมนูขายดี',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800]),
+          ),
+        ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(

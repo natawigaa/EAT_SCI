@@ -248,7 +248,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
 
                     const SizedBox(height: 32),
-
                     // ปุ่มสมัครสมาชิก
                     SizedBox(
                       width: double.infinity,
@@ -282,7 +281,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
 
                     // ลิงก์ไปหน้า Login
                     Center(
@@ -430,5 +429,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
         });
       }
     }
+  }
+
+  Future<void> _handleGoogleSignUp() async {
+    // Google sign-up has been removed. Use Supabase email confirmation flow.
+    return;
   }
 }

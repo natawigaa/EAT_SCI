@@ -619,20 +619,6 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _rateOrder(order),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.amber),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
-                child: const Text(
-                  'ให้คะแนน',
-                  style: TextStyle(color: Colors.amber),
-                ),
-              ),
-            ),
           ],
         );
       case 'cancelled':
@@ -727,43 +713,6 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
     );
   }
 
-  void _rateOrder(Map<String, dynamic> order) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('ให้คะแนนร้านอาหาร'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('ร้าน: ${order['restaurantName']}'),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (index) {
-                  return IconButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('ให้คะแนน ${index + 1} ดาว'),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.star_border, color: Colors.amber),
-                  );
-                }),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ยกเลิก'),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  
+
 }

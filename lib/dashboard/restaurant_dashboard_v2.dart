@@ -88,16 +88,6 @@ class _RestaurantDashboardV2State extends State<RestaurantDashboardV2> {
         ],
       ),
       actions: [
-        // Notification Bell
-        IconButton(
-          icon: Badge(
-            label: const Text('3'),
-            child: const Icon(Icons.notifications_outlined),
-          ),
-          onPressed: () {},
-        ),
-        const SizedBox(width: 8),
-        
         // User Profile
         Padding(
           padding: const EdgeInsets.only(right: 16),
@@ -681,9 +671,9 @@ class _ReportsTabState extends State<ReportsTab> {
         SupabaseService.getWeeklySales(int.parse(widget.restaurantId)),
         SupabaseService.getTopMenus(int.parse(widget.restaurantId), days: 7, limit: 5),
         SupabaseService.getPeakHours(int.parse(widget.restaurantId), days: 7),
-        SupabaseService.getSalesByPeriod(int.parse(widget.restaurantId), _selectedPeriod),
-        SupabaseService.getAverageProcessingTime(int.parse(widget.restaurantId)),
-        SupabaseService.getPeriodComparison(int.parse(widget.restaurantId), _selectedPeriod), // เพิ่มการโหลดข้อมูลเปรียบเทียบ
+  SupabaseService.getSalesByPeriod(int.parse(widget.restaurantId), _selectedPeriod),
+  SupabaseService.getAverageProcessingTime(int.parse(widget.restaurantId), period: _selectedPeriod),
+  SupabaseService.getPeriodComparison(int.parse(widget.restaurantId), _selectedPeriod), // เพิ่มการโหลดข้อมูลเปรียบเทียบ
       ]);
       
       print('✅ Dashboard: ได้รับข้อมูลจาก API แล้ว');
@@ -720,6 +710,7 @@ class _ReportsTabState extends State<ReportsTab> {
           int.parse(widget.restaurantId),
           newPeriod,
         ),
+        SupabaseService.getAverageProcessingTime(int.parse(widget.restaurantId), period: newPeriod),
         SupabaseService.getPeriodComparison(
           int.parse(widget.restaurantId),
           newPeriod,
@@ -728,7 +719,8 @@ class _ReportsTabState extends State<ReportsTab> {
       
       setState(() {
         _periodSummary = results[0] as Map<String, dynamic>;
-        _comparison = results[1] as Map<String, dynamic>;
+        _processingTime = results[1] as Map<String, dynamic>;
+        _comparison = results[2] as Map<String, dynamic>;
         _isLoading = false;
       });
     } catch (e) {
@@ -1253,8 +1245,8 @@ class _ReportsTabState extends State<ReportsTab> {
                 value: '฿${averageValue.toStringAsFixed(0)}',
                 subtitle: 'ต่อออเดอร์',
                 icon: Icons.analytics_rounded,
-                color: Colors.purple,
-                backgroundColor: Colors.purple.shade50,
+                color: Colors.black,
+                backgroundColor: Colors.black,
               ),
             ),
           ],
@@ -2132,10 +2124,199 @@ class _ReportsTabState extends State<ReportsTab> {
 // ===========================================
 // 🍽️ Menu Management Tab - จัดการเมนู
 // ===========================================
-class MenuManagementTab extends StatelessWidget {
+class MenuManagementTab extends StatefulWidget {
   final String restaurantId;
 
   const MenuManagementTab({super.key, required this.restaurantId});
+
+  @override
+  State<MenuManagementTab> createState() => _MenuManagementTabState();
+}
+
+class _MenuManagementTabState extends State<MenuManagementTab> {
+  List<Map<String, dynamic>> _menuItems = [];
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMenuItems();
+  }
+
+  Future<void> _loadMenuItems() async {
+    setState(() => _isLoading = true);
+    try {
+      final items = await SupabaseService.getMenuItems(int.parse(widget.restaurantId));
+      setState(() {
+        _menuItems = items;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('❌ Error loading menu items: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _showEditDialog({Map<String, dynamic>? item}) async {
+    final isNew = item == null;
+    final nameCtrl = TextEditingController(text: item != null ? item['name']?.toString() ?? '' : '');
+    final priceCtrl = TextEditingController(text: item != null ? (item['price']?.toString() ?? '') : '');
+    final categoryCtrl = TextEditingController(text: item != null ? item['category']?.toString() ?? '' : '');
+    final descCtrl = TextEditingController(text: item != null ? item['description']?.toString() ?? '' : '');
+  bool available = item != null ? (item['is_available'] == true || item['available'] == true) : true;
+    String? imageUrl = item != null ? item['image_url'] ?? item['imageUrl'] : null;
+    XFile? pickedImage;
+
+    final parentContext = context;
+
+    await showDialog<void>(
+      context: parentContext,
+      builder: (context) => StatefulBuilder(builder: (context, setStateDialog) {
+        return AlertDialog(
+          title: Text(isNew ? 'เพิ่มเมนูใหม่' : 'แก้ไขเมนู'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'ชื่อเมนู')),
+                const SizedBox(height: 8),
+                TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ราคา')),
+                const SizedBox(height: 8),
+                TextField(controller: categoryCtrl, decoration: const InputDecoration(labelText: 'หมวดหมู่')),
+                const SizedBox(height: 8),
+                TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'คำอธิบาย (ไม่บังคับ)')),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text('สถานะ: '),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SwitchListTile(
+                        value: available,
+                        title: Text(available ? 'พร้อมขาย' : 'หมด'),
+                        onChanged: (v) => setStateDialog(() => available = v),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (imageUrl != null)
+                  Column(children: [
+                    Image.network(imageUrl, height: 80, fit: BoxFit.cover),
+                    const SizedBox(height: 8),
+                  ]),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.image),
+                  label: const Text('เลือกรูปเมนู'),
+                  onPressed: () async {
+                    final ImagePicker picker = ImagePicker();
+                    final XFile? image = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1200, maxHeight: 1200, imageQuality: 80);
+                    if (image != null) {
+                      setStateDialog(() {
+                        pickedImage = image;
+                      });
+                    }
+                  },
+                ),
+                if (pickedImage != null) Text('ไฟล์ที่เลือก: ${pickedImage!.name}', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('ยกเลิก')),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                final price = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
+                final category = categoryCtrl.text.trim();
+                final description = descCtrl.text.trim();
+                if (name.isEmpty || price <= 0) {
+                  NotificationHelper.showWarning(context, 'กรุณากรอกชื่อและราคาถูกต้อง');
+                  return;
+                }
+
+                Navigator.pop(context);
+                setState(() => _isSaving = true);
+                try {
+                  String? uploadedUrl = imageUrl;
+                  if (pickedImage != null) {
+                    uploadedUrl = await SupabaseService.uploadMenuImage(pickedImage!.path, int.parse(widget.restaurantId));
+                  }
+
+                  final data = {
+                    'restaurant_id': int.parse(widget.restaurantId),
+                    'name': name,
+                    'price': price,
+                    'category': category,
+                    'description': description,
+                      'is_available': available,
+                    'image_url': uploadedUrl,
+                  };
+
+                  if (isNew) {
+                    final created = await SupabaseService.createMenuItem(data);
+                    if (created != null) {
+                      NotificationHelper.showSuccess(parentContext, 'เพิ่มเมนูสำเร็จ');
+                    } else {
+                      NotificationHelper.showError(parentContext, 'ไม่สามารถเพิ่มเมนูได้');
+                    }
+                  } else {
+                    final success = await SupabaseService.updateMenuItem(item!['id'] as int, data);
+                    if (success) NotificationHelper.showSuccess(parentContext, 'อัปเดตเมนูสำเร็จ');
+                    else NotificationHelper.showError(parentContext, 'ไม่สามารถอัปเดตเมนูได้');
+                  }
+                } catch (e) {
+                  print('❌ Error saving menu: $e');
+                  NotificationHelper.showError(parentContext, 'เกิดข้อผิดพลาด: $e');
+                } finally {
+                  setState(() => _isSaving = false);
+                  _loadMenuItems();
+                }
+              },
+              child: const Text('บันทึก'),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
+  Future<void> _toggleAvailable(Map<String, dynamic> item, bool val) async {
+    final id = item['id'] as int;
+  final success = await SupabaseService.updateMenuItem(id, {'is_available': val});
+    if (success) {
+      setState(() {
+        final idx = _menuItems.indexWhere((m) => m['id'] == id);
+        if (idx != -1) {
+          _menuItems[idx]['is_available'] = val;
+          _menuItems[idx]['available'] = val; // keep fallback key for older code
+        }
+      });
+    } else {
+      NotificationHelper.showError(context, 'ไม่สามารถเปลี่ยนสถานะได้');
+    }
+  }
+
+  Future<void> _confirmDelete(int id) async {
+    final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
+      title: const Text('ยืนยันลบ'),
+      content: const Text('ต้องการลบเมนูนี้หรือไม่?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('ยกเลิก')),
+        ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('ลบ')),
+      ],
+    ));
+    if (ok == true) {
+      final success = await SupabaseService.deleteMenuItem(id);
+      if (success) {
+        NotificationHelper.showSuccess(context, 'ลบเมนูแล้ว');
+        _loadMenuItems();
+      } else {
+        NotificationHelper.showError(context, 'ไม่สามารถลบเมนูได้');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2144,32 +2325,42 @@ class MenuManagementTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'จัดการเมนูอาหาร',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              const Expanded(child: Text('จัดการเมนูอาหาร', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
+              ElevatedButton.icon(onPressed: () => _showEditDialog(), icon: const Icon(Icons.add), label: const Text('เพิ่มเมนู')),
+            ],
           ),
-          const SizedBox(height: 20),
-          
-          const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.construction, size: 80, color: Colors.grey),
-                SizedBox(height: 16),
-                Text(
-                  '🚧 อยู่ระหว่างพัฒนา',
-                  style: TextStyle(fontSize: 18, color: Colors.grey),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'ฟีเจอร์การจัดการเมนู, เปลี่ยนสถานะ, แก้ไขรายละเอียด',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _menuItems.isEmpty
+                    ? Center(child: Text('ยังไม่มีเมนูสำหรับร้านนี้', style: TextStyle(color: Colors.grey[600])))
+                    : RefreshIndicator(
+                        onRefresh: _loadMenuItems,
+                        child: ListView.builder(
+                          itemCount: _menuItems.length,
+                          itemBuilder: (context, idx) {
+                            final m = _menuItems[idx];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: ListTile(
+                                leading: m['image_url'] != null
+                                    ? Image.network(m['image_url'], width: 56, height: 56, fit: BoxFit.cover)
+                                    : Container(width: 56, height: 56, color: Colors.grey[100], child: Icon(Icons.restaurant_menu, color: Colors.grey[600])),
+                                title: Text(m['name'] ?? '-'),
+                                subtitle: Text('${m['category'] ?? '-'} • ฿${(m['price'] ?? 0).toString()}'),
+                                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  Switch(value: (m['is_available'] == true) || (m['available'] == true), onChanged: (v) => _toggleAvailable(m, v)),
+                                  IconButton(icon: const Icon(Icons.edit), onPressed: () => _showEditDialog(item: m)),
+                                  IconButton(icon: const Icon(Icons.delete), onPressed: () => _confirmDelete(m['id'] as int)),
+                                ]),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
           ),
         ],
       ),
@@ -2198,6 +2389,20 @@ class _SettingsTabState extends State<SettingsTab> {
   String? _currentQrCodeUrl;
   bool _isLoadingQr = true;
   bool _isUploading = false;
+  String? _pendingQrUrl;
+  bool _isLoadingOpen = true;
+  bool _isOpen = true;
+  String _isOpenSource = 'stored';
+  bool _manualModeEditing = false; // UI: show manual toggle only when merchant enables manual mode
+  int? _openingHour;
+  int? _closingHour;
+  // Profile fields
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  String? _currentProfileImageUrl;
+  String? _pendingProfileImageUrl;
+  // history UI removed; audit table is still available via DB if needed
+  String? _openErrorMessage;
 
   @override
   void initState() {
@@ -2205,24 +2410,66 @@ class _SettingsTabState extends State<SettingsTab> {
     _loadCurrentQrCode();
   }
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadCurrentQrCode() async {
     try {
-      final restaurants = await SupabaseService.getRestaurants();
-      final restaurant = restaurants.firstWhere(
-        (r) => r['id'].toString() == widget.restaurantId,
-        orElse: () => {},
-      );
-
-      if (restaurant.isNotEmpty) {
-        setState(() {
-          _currentQrCodeUrl = restaurant['qr_code_url'];
-          _isLoadingQr = false;
-        });
+      // Use the new helper that computes effective is_open considering manual override and schedule
+      final info = await SupabaseService.getRestaurantEffectiveIsOpen(int.parse(widget.restaurantId));
+      Map<String, dynamic>? restaurant;
+      bool computedOpen = true;
+      String source = 'stored';
+      if (info != null) {
+        restaurant = Map<String, dynamic>.from(info['restaurant'] ?? {});
+        computedOpen = info['is_open'] == true;
+        source = info['source']?.toString() ?? 'stored';
+        // store opening hours if present
+        try {
+          _openingHour = restaurant.containsKey('opening_hour') ? (restaurant['opening_hour'] is int ? restaurant['opening_hour'] as int : int.tryParse(restaurant['opening_hour'].toString())) : null;
+          _closingHour = restaurant.containsKey('closing_hour') ? (restaurant['closing_hour'] is int ? restaurant['closing_hour'] as int : int.tryParse(restaurant['closing_hour'].toString())) : null;
+        } catch (_) {
+          _openingHour = null;
+          _closingHour = null;
+        }
+      } else {
+        // fallback to querying restaurants
+        final restaurants = await SupabaseService.getRestaurants();
+        final r = restaurants.firstWhere((r) => r['id'].toString() == widget.restaurantId, orElse: () => {});
+        restaurant = r is Map<String, dynamic> ? r : {};
+        try {
+          if (restaurant.containsKey('is_open')) computedOpen = restaurant['is_open'] == true;
+        } catch (_) {}
       }
+
+      setState(() {
+        _currentQrCodeUrl = restaurant != null ? restaurant['qr_code_url'] : null;
+        _currentProfileImageUrl = restaurant != null ? (restaurant['image_url'] ?? restaurant['profile_image_url']) : null;
+        // populate editable fields
+        try {
+          if (restaurant != null) {
+            _nameController.text = (restaurant['name'] ?? widget.restaurantName)?.toString() ?? '';
+            _phoneController.text = restaurant['phone']?.toString() ?? '';
+          }
+        } catch (_) {}
+        _isLoadingQr = false;
+        _isOpen = computedOpen;
+        _isLoadingOpen = false;
+        _isOpenSource = source;
+        // Show manual controls if the effective source is manual
+        _manualModeEditing = source == 'manual';
+      });
+  // Note: user-facing UI no longer mentions internal "effective" term
+  print('ℹ️ Restaurant is_open computed: $_isOpen (source: $source)');
     } catch (e) {
       print('❌ Error loading QR: $e');
       setState(() {
         _isLoadingQr = false;
+        _isLoadingOpen = false;
       });
     }
   }
@@ -2254,38 +2501,19 @@ class _SettingsTabState extends State<SettingsTab> {
         print('🗑️ Clear image cache: $_currentQrCodeUrl');
       }
 
-      // อัปโหลดไป Supabase Storage
+      // อัปโหลดไป Supabase Storage (แต่ยังไม่ยืนยันเข้าฐานข้อมูล)
       final qrUrl = await SupabaseService.uploadRestaurantQrCode(
         image.path,
         int.parse(widget.restaurantId),
       );
 
       if (qrUrl != null) {
-        // อัปเดต URL ใน database
-        final success = await SupabaseService.updateRestaurantQrCode(
-          int.parse(widget.restaurantId),
-          qrUrl,
-        );
-
-        if (success) {
-          // บังคับ clear cache ของ URL ใหม่ด้วย (เผื่อมี timestamp เดิมติดอยู่)
-          imageCache.clear();
-          print('🧹 Clear all image cache');
-
-          setState(() {
-            _currentQrCodeUrl = qrUrl;
-            _isUploading = false;
-          });
-
-          if (mounted) {
-            NotificationHelper.showSuccess(
-              context,
-              'อัปโหลด QR Code สำเร็จ!',
-            );
-          }
-        } else {
-          throw Exception('ไม่สามารถอัปเดต URL ใน database');
-        }
+        // keep pending url until merchant confirms
+        setState(() {
+          _pendingQrUrl = qrUrl;
+          _isUploading = false;
+        });
+        if (mounted) NotificationHelper.showInfo(context, 'อัปโหลดสำเร็จ — กรุณากด "ยืนยัน" เพื่อบันทึก URL ลงฐานข้อมูล');
       } else {
         throw Exception('อัปโหลดไฟล์ไม่สำเร็จ');
       }
@@ -2304,6 +2532,141 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
+  // Confirm and save pending QR URL into DB
+  Future<void> _confirmPendingQr() async {
+    if (_pendingQrUrl == null) return;
+    setState(() => _isUploading = true);
+    try {
+      final success = await SupabaseService.updateRestaurantQrCode(int.parse(widget.restaurantId), _pendingQrUrl!);
+      if (success) {
+        imageCache.clear();
+        setState(() {
+          _currentQrCodeUrl = _pendingQrUrl;
+          _pendingQrUrl = null;
+          _isUploading = false;
+        });
+        NotificationHelper.showSuccess(context, 'บันทึก QR Code สำเร็จ');
+      } else {
+        setState(() => _isUploading = false);
+        NotificationHelper.showError(context, 'ไม่สามารถบันทึก QR Code ได้');
+      }
+    } catch (e) {
+      setState(() => _isUploading = false);
+      NotificationHelper.showError(context, 'เกิดข้อผิดพลาด: $e');
+    }
+  }
+
+  Future<void> _clearQr() async {
+    setState(() => _isUploading = true);
+    try {
+      final success = await SupabaseService.updateRestaurantQrCode(int.parse(widget.restaurantId), null);
+      if (success) {
+        imageCache.clear();
+        setState(() {
+          _currentQrCodeUrl = null;
+          _pendingQrUrl = null;
+          _isUploading = false;
+        });
+        NotificationHelper.showSuccess(context, 'ล้าง QR Code สำเร็จ');
+      } else {
+        setState(() => _isUploading = false);
+        NotificationHelper.showError(context, 'ไม่สามารถล้าง QR Code ได้');
+      }
+    } catch (e) {
+      setState(() => _isUploading = false);
+      NotificationHelper.showError(context, 'เกิดข้อผิดพลาด: $e');
+    }
+  }
+
+  // Profile image upload + confirm flow
+  Future<void> _pickAndUploadProfileImage() async {
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (image == null) return;
+      setState(() => _isUploading = true);
+
+      final imgUrl = await SupabaseService.uploadRestaurantImage(image.path, int.parse(widget.restaurantId));
+      if (imgUrl != null) {
+        setState(() {
+          _pendingProfileImageUrl = imgUrl;
+          _isUploading = false;
+        });
+        if (mounted) NotificationHelper.showInfo(context, 'อัปโหลดรูปสำเร็จ — กรุณากด "ยืนยัน" เพื่อบันทึก');
+      } else {
+        throw Exception('อัปโหลดรูปไม่สำเร็จ');
+      }
+    } catch (e) {
+      print('❌ Error uploading profile image: $e');
+      setState(() => _isUploading = false);
+      if (mounted) NotificationHelper.showError(context, 'เกิดข้อผิดพลาด: $e');
+    }
+  }
+
+  Future<void> _confirmPendingProfileImage() async {
+    if (_pendingProfileImageUrl == null) return;
+    setState(() => _isUploading = true);
+    try {
+      final success = await SupabaseService.updateRestaurantDetails(int.parse(widget.restaurantId), imageUrl: _pendingProfileImageUrl);
+      if (success) {
+        imageCache.clear();
+        setState(() {
+          _currentProfileImageUrl = _pendingProfileImageUrl;
+          _pendingProfileImageUrl = null;
+          _isUploading = false;
+        });
+        NotificationHelper.showSuccess(context, 'บันทึกรูปโปรไฟล์เรียบร้อย');
+      } else {
+        setState(() => _isUploading = false);
+        NotificationHelper.showError(context, 'ไม่สามารถบันทึกรูปโปรไฟล์ได้');
+      }
+    } catch (e) {
+      setState(() => _isUploading = false);
+      NotificationHelper.showError(context, 'เกิดข้อผิดพลาด: $e');
+    }
+  }
+
+  Future<void> _clearProfileImage() async {
+    setState(() => _isUploading = true);
+    try {
+      final success = await SupabaseService.updateRestaurantDetails(int.parse(widget.restaurantId), imageUrl: null, setImageToNull: true);
+      if (success) {
+        imageCache.clear();
+        setState(() {
+          _currentProfileImageUrl = null;
+          _pendingProfileImageUrl = null;
+          _isUploading = false;
+        });
+        NotificationHelper.showSuccess(context, 'ลบรูปโปรไฟล์เรียบร้อย');
+      } else {
+        setState(() => _isUploading = false);
+        NotificationHelper.showError(context, 'ไม่สามารถลบรูปโปรไฟล์ได้');
+      }
+    } catch (e) {
+      setState(() => _isUploading = false);
+      NotificationHelper.showError(context, 'เกิดข้อผิดพลาด: $e');
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    if (d.isNegative) return '0 นาที';
+    final days = d.inDays;
+    final hours = d.inHours % 24;
+    final minutes = d.inMinutes % 60;
+    final parts = <String>[];
+    if (days > 0) parts.add('${days}d');
+    if (hours > 0) parts.add('${hours}ชั่วโมง');
+    if (minutes > 0) parts.add('${minutes}นาที');
+    return parts.isEmpty ? '0 นาที' : parts.join(' ');
+  }
+
+  // history UI removed; audit data remains in DB (`restaurant_open_history`)
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -2321,19 +2684,149 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
             const SizedBox(height: 20),
 
-            // ข้อมูลร้าน
+            // ข้อมูลร้าน (แก้ไขชื่อ เบอร์ รูปโปรไฟล์)
             Card(
-              child: ListTile(
-                leading: const Icon(Icons.store),
-                title: const Text('ชื่อร้าน'),
-                subtitle: Text(widget.restaurantName),
-                trailing: const Icon(Icons.edit),
-                onTap: () {
-                  NotificationHelper.showInfo(
-                    context,
-                    '🚧 ฟีเจอร์แก้ไขชื่อร้านกำลังพัฒนา',
-                  );
-                },
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('ข้อมูลร้าน', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: _currentProfileImageUrl != null
+                              ? Image.network(
+                                  _currentProfileImageUrl!,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (c, e, s) => Container(
+                                    width: 80,
+                                    height: 80,
+                                    color: Colors.grey[300],
+                                    child: const Icon(Icons.broken_image),
+                                  ),
+                                )
+                              : Container(
+                                  width: 80,
+                                  height: 80,
+                                  color: Colors.orange.withOpacity(0.1),
+                                  child: const Icon(Icons.store, color: Colors.orange, size: 36),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TextField(
+                                controller: _nameController,
+                                decoration: const InputDecoration(labelText: 'ชื่อร้าน'),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: _phoneController,
+                                decoration: const InputDecoration(labelText: 'เบอร์โทรศัพท์'),
+                                keyboardType: TextInputType.phone,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Image upload controls for profile image
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _isUploading ? null : _pickAndUploadProfileImage,
+                          icon: const Icon(Icons.upload_file),
+                          label: const Text('อัปโหลดรูปโปรไฟล์'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          onPressed: _isUploading || (_currentProfileImageUrl == null && _pendingProfileImageUrl == null) ? null : _clearProfileImage,
+                          icon: const Icon(Icons.delete),
+                          label: const Text('ลบรูป'),
+                        ),
+                      ],
+                    ),
+
+                    if (_pendingProfileImageUrl != null) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.network(_pendingProfileImageUrl!, width: 80, height: 80, fit: BoxFit.cover),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: _isUploading ? null : _confirmPendingProfileImage,
+                            icon: const Icon(Icons.check),
+                            label: const Text('ยืนยันรูป'),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: _isUploading
+                                ? null
+                                : () {
+                                    setState(() => _pendingProfileImageUrl = null);
+                                    NotificationHelper.showInfo(context, 'ยกเลิกการเปลี่ยนรูป (ไฟล์ยังคงอยู่ใน storage)');
+                                  },
+                            icon: const Icon(Icons.close),
+                            label: const Text('ยกเลิก'),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: () async {
+                            setState(() => _isLoadingOpen = true);
+                            final name = _nameController.text.trim();
+                            final phone = _phoneController.text.trim();
+                            String? imageToSave;
+                            if (_pendingProfileImageUrl != null) imageToSave = _pendingProfileImageUrl;
+
+                            final success = await SupabaseService.updateRestaurantDetails(int.parse(widget.restaurantId), name: name.isEmpty ? null : name, phone: phone.isEmpty ? null : phone, imageUrl: imageToSave);
+                            if (success) {
+                              NotificationHelper.showSuccess(context, 'บันทึกข้อมูลร้านเรียบร้อย');
+                              // reload
+                              await _loadCurrentQrCode();
+                            } else {
+                              NotificationHelper.showError(context, 'ไม่สามารถบันทึกข้อมูลร้านได้');
+                              setState(() => _isLoadingOpen = false);
+                            }
+                          },
+                          child: const Text('บันทึกข้อมูลร้าน'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton(
+                          onPressed: () {
+                            setState(() {
+                              _nameController.text = widget.restaurantName;
+                              _phoneController.text = '';
+                              _pendingProfileImageUrl = null;
+                            });
+                          },
+                          child: const Text('ยกเลิก'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -2496,19 +2989,392 @@ class _SettingsTabState extends State<SettingsTab> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 12),
+
+                  // If there's a pending uploaded QR (not yet saved), show preview + confirm/ cancel
+                  if (_pendingQrUrl != null)
+                    Center(
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              _pendingQrUrl!,
+                              width: 160,
+                              height: 160,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                width: 160,
+                                height: 160,
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.broken_image, size: 36),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: _isUploading ? null : _confirmPendingQr,
+                                icon: const Icon(Icons.check),
+                                label: const Text('ยืนยัน'),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                              ),
+                              const SizedBox(width: 12),
+                              OutlinedButton.icon(
+                                onPressed: _isUploading
+                                    ? null
+                                    : () {
+                                        // discard pending URL (object remains in storage)
+                                        setState(() => _pendingQrUrl = null);
+                                        NotificationHelper.showInfo(context, 'ยกเลิกการเปลี่ยน QR (ไฟล์จะถูกเก็บไว้ใน storage)');
+                                      },
+                                icon: const Icon(Icons.close),
+                                label: const Text('ยกเลิก'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
-          const Center(
-            child: Text(
-              '🚧 ฟีเจอร์เพิ่มเติมกำลังพัฒนา',
-              style: TextStyle(color: Colors.grey),
+          // Manual mode control (separate card above status) — small button to enable/disable manual mode
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'กดการเปิด/ปิดร้านด้วยตนเอง (Manual Mode)',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[800]),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 36,
+                    child: OutlinedButton(
+                      onPressed: _isLoadingOpen
+                          ? null
+                          : () async {
+                              if (!_manualModeEditing) {
+                                setState(() {
+                                  _isLoadingOpen = true;
+                                  _openErrorMessage = null;
+                                });
+
+                                final success = await SupabaseService.updateRestaurantIsOpen(int.parse(widget.restaurantId), _isOpen, isManual: true);
+                                if (success) {
+                                  setState(() => _manualModeEditing = true);
+                                  await _loadCurrentQrCode();
+                                  NotificationHelper.showSuccess(context, 'เปิดโหมดตั้งสถานะด้วยตน');
+                                } else {
+                                  setState(() => _isLoadingOpen = false);
+                                  NotificationHelper.showError(context, 'ไม่สามารถเปิดโหมดตั้งสถานะด้วยตนเองได้');
+                                }
+                              } else {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    title: const Text('ยืนยัน'),
+                                    content: const Text('ต้องการยกเลิกการตั้งค่าสถานะแบบ manual และคืนค่าให้ใช้เวลาทำการตามระบบหรือไม่?'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('ยกเลิก')),
+                                      ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('ยืนยัน')),
+                                    ],
+                                  ),
+                                );
+                                if (confirm != true) return;
+
+                                setState(() {
+                                  _isLoadingOpen = true;
+                                  _openErrorMessage = null;
+                                });
+
+                                bool isOpenToSet = _isOpen;
+                                try {
+                                  if (_openingHour != null && _closingHour != null) {
+                                    final nowHour = DateTime.now().hour;
+                                    final opening = _openingHour!;
+                                    final closing = _closingHour!;
+                                    bool isOpenBySchedule;
+                                    if (opening <= closing) {
+                                      isOpenBySchedule = nowHour >= opening && nowHour <= closing;
+                                    } else {
+                                      isOpenBySchedule = nowHour >= opening || nowHour <= closing;
+                                    }
+                                    isOpenToSet = isOpenBySchedule;
+                                  }
+                                } catch (_) {}
+
+                                final success = await SupabaseService.updateRestaurantIsOpen(int.parse(widget.restaurantId), isOpenToSet, isManual: false);
+                                if (success) {
+                                  setState(() => _manualModeEditing = false);
+                                  await _loadCurrentQrCode();
+                                  NotificationHelper.showSuccess(context, 'ยกเลิกการตั้งค่าแบบ manual เรียบร้อย');
+                                } else {
+                                  setState(() {
+                                    _isLoadingOpen = false;
+                                    _openErrorMessage = 'ไม่สามารถยกเลิกการตั้งค่า manual ได้';
+                                  });
+                                  NotificationHelper.showError(context, 'ไม่สามารถยกเลิกการตั้งค่า manual ได้');
+                                }
+                              }
+                            },
+                      child: Text(_manualModeEditing ? 'ยกเลิก' : 'ตั้งค่า'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _manualModeEditing ? Colors.redAccent : Colors.orange.shade700,
+                        side: BorderSide(color: _manualModeEditing ? Colors.redAccent : Colors.orange.shade700),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+
+          const SizedBox(height: 12),
+
+          // Manual Open/Close toggle (manual override) with expiry picker + history
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(
+                      _isOpen ? Icons.storefront : Icons.store_mall_directory,
+                      color: _isOpen ? Colors.green : Colors.grey,
+                    ),
+                    title: const Text('สถานะร้าน'),
+                    subtitle: _isLoadingOpen
+                        ? const Text('กำลังโหลดสถานะ...')
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_isOpen ? 'ร้านเปิด' : 'ร้านปิด',style: TextStyle(fontSize: 12, color: Colors.blue)),
+                              const SizedBox(height: 6),
+                              const Text('หมายเหตุ: การตั้งค่านี้จะคงอยู่จนกว่าจะยกเลิกโดยเจ้าของร้าน', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Text('แหล่งสถานะ: ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                  const SizedBox(width: 6),
+                                  Chip(
+                                    label: Text(_isOpenSource, style: const TextStyle(fontSize: 12, color: Colors.white)),
+                                    backgroundColor: _isOpenSource == 'manual' ? Colors.orange.shade700 : Colors.blue.shade600,
+                                  ),
+                                ],
+                              ),
+                              if (_openErrorMessage != null) ...[
+                                const SizedBox(height: 8),
+                                Text(_openErrorMessage!, style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+                              ],
+                            ],
+                          ),
+                    trailing: _manualModeEditing
+                        ? Switch(
+                            value: _isOpen,
+                            onChanged: _isLoadingOpen
+                                ? null
+                                : (val) async {
+                                    setState(() {
+                                      _isLoadingOpen = true;
+                                      _openErrorMessage = null;
+                                    });
+                                    final success = await SupabaseService.updateRestaurantIsOpen(int.parse(widget.restaurantId), val, isManual: true);
+                                    if (success) {
+                                      // reload state
+                                      await _loadCurrentQrCode();
+                                      setState(() {
+                                        _openErrorMessage = null;
+                                      });
+                                      NotificationHelper.showSuccess(context, val ? 'ตั้งค่าสถานะเป็น เปิด แล้ว' : 'ตั้งค่าสถานะเป็น ปิด แล้ว');
+                                    } else {
+                                      setState(() {
+                                        _isLoadingOpen = false;
+                                        _openErrorMessage = 'ไม่สามารถเปลี่ยนสถานะร้านได้';
+                                      });
+                                      NotificationHelper.showError(context, 'ไม่สามารถเปลี่ยนสถานะร้านได้');
+                                    }
+                                  },
+                          )
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Small control button: enable manual mode (shows toggle) / disable manual mode (clears manual override)
+         /* Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              children: [
+                const Spacer(),
+                SizedBox(
+                  height: 36,
+                  child: OutlinedButton(
+                    onPressed: _isLoadingOpen
+                        ? null
+                        : () async {
+                            // If not currently editing, enable manual mode and show toggle
+                            if (!_manualModeEditing) {
+                              setState(() {
+                                _isLoadingOpen = true;
+                                _openErrorMessage = null;
+                              });
+
+                              // Activate manual mode without changing open state (preserve current effective value)
+                              final success = await SupabaseService.updateRestaurantIsOpen(int.parse(widget.restaurantId), _isOpen, isManual: true);
+                              if (success) {
+                                setState(() => _manualModeEditing = true);
+                                await _loadCurrentQrCode();
+                                NotificationHelper.showSuccess(context, 'เปิดโหมดตั้งสถานะด้วยตน');
+                              } else {
+                                setState(() => _isLoadingOpen = false);
+                                NotificationHelper.showError(context, 'ไม่สามารถเปิดโหมดตั้งสถานะด้วยตนเองได้');
+                              }
+                            } else {
+                              // Confirm before disabling manual mode
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (c) => AlertDialog(
+                                  title: const Text('ยืนยัน'),
+                                  content: const Text('ต้องการยกเลิกการตั้งค่าสถานะแบบ manual และคืนค่าให้ใช้เวลาทำการตามระบบหรือไม่?'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('ยกเลิก')),
+                                    ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('ยืนยัน')),
+                                  ],
+                                ),
+                              );
+                              if (confirm != true) return;
+
+                              setState(() {
+                                _isLoadingOpen = true;
+                                _openErrorMessage = null;
+                              });
+
+                              // Compute schedule-derived isOpen if opening/closing hours are available
+                              bool isOpenToSet = _isOpen; // fallback: keep current effective value
+                              try {
+                                if (_openingHour != null && _closingHour != null) {
+                                  final nowHour = DateTime.now().hour;
+                                  final opening = _openingHour!;
+                                  final closing = _closingHour!;
+                                  bool isOpenBySchedule;
+                                  if (opening <= closing) {
+                                    isOpenBySchedule = nowHour >= opening && nowHour <= closing;
+                                  } else {
+                                    isOpenBySchedule = nowHour >= opening || nowHour <= closing;
+                                  }
+                                  isOpenToSet = isOpenBySchedule;
+                                }
+                              } catch (_) {}
+
+                              final success = await SupabaseService.updateRestaurantIsOpen(int.parse(widget.restaurantId), isOpenToSet, isManual: false);
+                              if (success) {
+                                setState(() => _manualModeEditing = false);
+                                await _loadCurrentQrCode();
+                                NotificationHelper.showSuccess(context, 'ยกเลิกการตั้งค่าแบบ manual เรียบร้อย');
+                              } else {
+                                setState(() {
+                                  _isLoadingOpen = false;
+                                  _openErrorMessage = 'ไม่สามารถยกเลิกการตั้งค่า manual ได้';
+                                });
+                                NotificationHelper.showError(context, 'ไม่สามารถยกเลิกการตั้งค่า manual ได้');
+                              }
+                            }
+                          },
+                    child: Text(_manualModeEditing ? 'ยกเลิกการต้ังค่าสถานะร้านเอง' : 'ตั้งสถานะร้านด้วยตนเอง'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _manualModeEditing ? Colors.black : Colors.orange.shade700,
+                      side: BorderSide(color: _manualModeEditing ? Colors.black : Colors.orange.shade700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),*/
+
+          const SizedBox(height: 16),
+
+          // Opening hours settings
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('เวลาทำการ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('ตั้งค่าเวลาที่เปิดและปิดร้าน (ชั่วโมงแบบ 24 ชั่วโมง) โดยค่าจะบันทึกลงในฐานข้อมูล'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButton<int>(
+                          value: _openingHour,
+                          hint: const Text('เวลาเปิด'),
+                          isExpanded: true,
+                          items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text("${i.toString().padLeft(2, '0')}:00"))),
+                          onChanged: (v) => setState(() => _openingHour = v),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButton<int>(
+                          value: _closingHour,
+                          hint: const Text('เวลาปิด'),
+                          isExpanded: true,
+                          items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text("${i.toString().padLeft(2, '0')}:00"))),
+                          onChanged: (v) => setState(() => _closingHour = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      ElevatedButton(
+                        onPressed: () async {
+                          setState(() => _isLoadingOpen = true);
+                          final success = await SupabaseService.updateRestaurantHours(int.parse(widget.restaurantId), _openingHour, _closingHour);
+                          if (success) {
+                            NotificationHelper.showSuccess(context, 'บันทึกเวลาทำการเรียบร้อย');
+                            await _loadCurrentQrCode();
+                          } else {
+                            NotificationHelper.showError(context, 'ไม่สามารถบันทึกเวลาทำการได้');
+                            setState(() => _isLoadingOpen = false);
+                          }
+                        },
+                        child: const Text('บันทึก'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton(
+                        onPressed: () {
+                          setState(() {
+                            _openingHour = null;
+                            _closingHour = null;
+                          });
+                        },
+                        child: const Text('รีเซ็ต'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+         
           
           // เพิ่ม spacing ท้ายหน้า
           const SizedBox(height: 40),

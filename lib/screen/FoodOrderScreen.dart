@@ -319,7 +319,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.blue[600],
-                            fontStyle: FontStyle.italic,
+                            
                           ),
                         ),
                       ],
@@ -405,7 +405,7 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
                   child: TextButton.icon(
                     onPressed: () => _editItem(index),
                     icon: const Icon(Icons.edit, size: 16),
-                     label: const Text('แก้ไข'),
+                    label: const Text('ระบุรายละเอียดเมนู'),
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.grey[600],
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -546,23 +546,8 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.mainOrange,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-               'เลือกอาหาร',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          // The "เลือกอาหาร" button was removed per UX request. Users can navigate back
+          // using the app's bottom navigation or the back button.
         ],
       ),
     );
@@ -593,9 +578,60 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
   }
 
   void _editItem(int index) {
-    // Navigate to edit item screen
-    print('Edit item: ${cartItems[index]['foodname']}');
-    // Navigator.push(context, MaterialPageRoute(...));
+    // Edit special request for the item
+    final currentRequest = cartItems[index]['specialRequest'] as String? ?? '';
+    final controller = TextEditingController(text: currentRequest);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('คำขอพิเศษสำหรับเมนู'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  cartItems[index]['foodname'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'ระบุคำขอพิเศษ เช่น ขอเผ็ดน้อย, ไม่ใส่ผัก',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('ยกเลิก'),
+            ),
+            TextButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                setState(() {
+                  _cartService.updateSpecialRequest(index, text);
+                });
+                Navigator.of(context).pop();
+                NotificationHelper.showSuccess(
+                  context,
+                  text.isEmpty ? 'ลบคำขอพิเศษแล้ว' : 'บันทึกคำขอพิเศษแล้ว',
+                );
+              },
+              child: const Text('บันทึก'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _clearAllCart() {

@@ -4,6 +4,7 @@ import 'dart:io';
 class SupabaseService {
   static final SupabaseClient _client = Supabase.instance.client;
   
+  
   // ดึงข้อมูลร้านอาหารทั้งหมด
   static Future<List<Map<String, dynamic>>> getRestaurants() async {
     try {
@@ -74,6 +75,98 @@ class SupabaseService {
     } catch (e) {
       print('❌ Error fetching restaurant with menus: $e');
       return null;
+    }
+  }
+
+  /// อ่านข้อมูลร้านและคำนวณสถานะ "is_open" โดยพิจารณาจาก
+  /// 1) manual override (is_open_manual + manual_override_expires)
+  /// 2) opening_hour / closing_hour (ถ้ามี)
+  /// 3) fallback เป็นคอลัมน์ is_open ที่เก็บใน DB
+  /// คืนค่าเป็น Map: { is_open: bool, source: 'manual'|'schedule'|'stored', restaurant: {...} }
+  static Future<Map<String, dynamic>?> getRestaurantEffectiveIsOpen(int restaurantId) async {
+    try {
+      final response = await _client
+          .from('restaurants')
+          .select()
+          .eq('id', restaurantId)
+          .single();
+
+      if (response == null) return null;
+      final restaurant = Map<String, dynamic>.from(response);
+
+      final bool storedIsOpen = restaurant['is_open'] == true;
+      final bool isManual = restaurant['is_open_manual'] == true;
+
+      // Manual override: if merchant has toggled manual flag, respect stored is_open
+      // Note: Expiry is intentionally ignored here — manual overrides persist
+      // until the merchant toggles them again. This implements the chosen
+      // behaviour: manual action has precedence over schedule until changed.
+      if (isManual) {
+        return {
+          'is_open': storedIsOpen,
+          'source': 'manual',
+          'restaurant': restaurant,
+        };
+      }
+
+      // If opening_hour/closing_hour exist use them (simple hour-based check)
+      try {
+        if (restaurant.containsKey('opening_hour') && restaurant.containsKey('closing_hour') && restaurant['opening_hour'] != null && restaurant['closing_hour'] != null) {
+          final openingRaw = restaurant['opening_hour'];
+          final closingRaw = restaurant['closing_hour'];
+          final int opening = openingRaw is int ? openingRaw : int.tryParse(openingRaw.toString()) ?? 0;
+          final int closing = closingRaw is int ? closingRaw : int.tryParse(closingRaw.toString()) ?? 23;
+
+          final nowLocal = DateTime.now();
+          final hour = nowLocal.hour;
+
+          // Support ranges that cross midnight (e.g., open 18, close 2)
+          bool isOpenBySchedule;
+          if (opening <= closing) {
+            isOpenBySchedule = hour >= opening && hour <= closing;
+          } else {
+            // crosses midnight
+            isOpenBySchedule = hour >= opening || hour <= closing;
+          }
+
+          return {
+            'is_open': isOpenBySchedule,
+            'source': 'schedule',
+            'restaurant': restaurant,
+          };
+        }
+      } catch (e) {
+        print('⚠️ Error computing schedule-based open: $e');
+      }
+
+      // Fallback: return stored value
+      return {
+        'is_open': storedIsOpen,
+        'source': 'stored',
+        'restaurant': restaurant,
+      };
+    } catch (e) {
+      print('❌ Error fetching restaurant effective is_open: $e');
+      return null;
+    }
+  }
+
+  /// ดึงประวัติการเปลี่ยนสถานะเปิด/ปิดของร้าน
+  static Future<List<Map<String, dynamic>>> getRestaurantOpenHistory(int restaurantId, {int limit = 50}) async {
+    try {
+      final response = await _client
+          .from('restaurant_open_history')
+          .select()
+          .eq('restaurant_id', restaurantId)
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      final List<Map<String, dynamic>> rows = List<Map<String, dynamic>>.from(response);
+      print('✅ ดึงประวัติการเปลี่ยนสถานะร้าน $restaurantId: ${rows.length} รายการ');
+      return rows;
+    } catch (e) {
+      print('❌ Error fetching restaurant open history: $e');
+      return [];
     }
   }
   
@@ -414,6 +507,66 @@ class SupabaseService {
     }
   }
 
+  /// ดึง orders ที่สถานะ completed ของนักศึกษา (ทั้งหมด)
+  static Future<List<Map<String, dynamic>>> getCompletedOrders(String studentId) async {
+    try {
+      print('📦 กำลังดึง completed orders ของ student $studentId...');
+
+      final ordersResponse = await _client
+          .from('orders')
+          .select('*, order_items(*), restaurants!orders_restaurant_id_fkey(name)')
+          .eq('student_id', studentId)
+          .eq('status', 'completed')
+          .order('completed_at', ascending: false);
+
+      final List<Map<String, dynamic>> orders = List<Map<String, dynamic>>.from(ordersResponse);
+
+      // แปลงข้อมูลเหมือน getReadyOrders
+      for (var order in orders) {
+        final orderItems = order['order_items'] as List? ?? [];
+
+        final items = orderItems.map((item) {
+          return {
+            ...item,
+            'menu_name': item['food_name'] ?? 'Unknown',
+            'price': item['price'] ?? 0,
+            'quantity': item['quantity'] ?? 1,
+          };
+        }).toList();
+
+        order['items'] = items;
+        order.remove('order_items');
+
+        if (order['restaurants'] != null) {
+          order['restaurant_name'] = order['restaurants']['name'];
+        }
+        order.remove('restaurants');
+
+        // แปลง payment slip URL
+        if (order['payment_slip_url'] != null) {
+          final oldUrl = order['payment_slip_url'] as String;
+          if (oldUrl.contains('/payment-slips/')) {
+            final fileName = oldUrl.split('/payment-slips/').last.split('?').first;
+            try {
+              final signedUrl = await _client.storage
+                  .from('payment-slips')
+                  .createSignedUrl(fileName, 60 * 60 * 24 * 365);
+              order['payment_slip_url'] = signedUrl;
+            } catch (e) {
+              print('⚠️ ไม่สามารถสร้าง signed URL: $e');
+            }
+          }
+        }
+      }
+
+      print('✅ ดึง ${orders.length} completed orders สำเร็จ');
+      return orders;
+    } catch (e) {
+      print('❌ Error fetching completed orders: $e');
+      return [];
+    }
+  }
+
   /// ดึงประวัติการสั่งซื้อ 7 วันย้อนหลัง (status = completed) - Phase 6
   static Future<List<Map<String, dynamic>>> getOrderHistory(String studentId, {int days = 7}) async {
     try {
@@ -631,8 +784,140 @@ class SupabaseService {
     }
   }
 
+  /// อัปโหลดรูปเมนูไปที่ bucket `menu_images` และคืนค่า public URL
+  static Future<String?> uploadMenuImage(String filePath, int restaurantId) async {
+    try {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'restaurant-${restaurantId}-menu-$timestamp.jpg';
+      final storagePath = fileName;
+
+      print('📤 กำลังอัปโหลดรูปเมนู: $storagePath');
+
+      // upload (upsert true to overwrite if same name exists)
+      await _client.storage
+          .from('menu_images')
+          .upload(storagePath, File(filePath), fileOptions: const FileOptions(upsert: true));
+
+      final baseUrl = _client.storage.from('menu_images').getPublicUrl(storagePath);
+      final url = '$baseUrl?t=$timestamp';
+      print('✅ อัปโหลดรูปเมนูสำเร็จ: $url');
+      return url;
+    } catch (e) {
+      print('❌ Error uploading menu image: $e');
+      return null;
+    }
+  }
+
+  /// อัปโหลดรูปโปรไฟล์ร้านไปที่ bucket `profile_images` และคืนค่า public URL
+  static Future<String?> uploadRestaurantImage(String filePath, int restaurantId) async {
+    try {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'restaurant-${restaurantId}-profile-$timestamp.jpg';
+      final storagePath = fileName;
+
+      print('📤 กำลังอัปโหลดรูปโปรไฟล์ร้าน: $storagePath');
+
+      await _client.storage
+          .from('profile_images')
+          .upload(storagePath, File(filePath), fileOptions: const FileOptions(upsert: true));
+
+      final baseUrl = _client.storage.from('profile_images').getPublicUrl(storagePath);
+      final url = '$baseUrl?t=$timestamp';
+      print('✅ อัปโหลดรูปโปรไฟล์สำเร็จ: $url');
+      return url;
+    } catch (e) {
+      print('❌ Error uploading restaurant profile image: $e');
+      return null;
+    }
+  }
+
+  /// อัปเดตข้อมูลร้าน (name, phone, image_url)
+  /// ถ้าต้องการเคี่ยร์ค่า image ให้ส่ง `setImageToNull = true`
+  static Future<bool> updateRestaurantDetails(int restaurantId, {String? name, String? phone, String? imageUrl, bool setImageToNull = false}) async {
+    try {
+      final updateData = <String, dynamic>{};
+      if (name != null) updateData['name'] = name;
+      if (phone != null) updateData['phone'] = phone;
+      if (imageUrl != null) updateData['image_url'] = imageUrl;
+      if (setImageToNull && imageUrl == null) updateData['image_url'] = null;
+
+      if (updateData.isEmpty) {
+        print('⚠️ updateRestaurantDetails called with no changes');
+        return true;
+      }
+
+      await _client
+          .from('restaurants')
+          .update(updateData)
+          .eq('id', restaurantId);
+
+      print('✅ อัปเดตข้อมูลร้าน #$restaurantId -> $updateData');
+      return true;
+    } catch (e) {
+      print('❌ Error updating restaurant details: $e');
+      return false;
+    }
+  }
+
+  /// สร้างเมนูรายการใหม่ในตาราง `menu_items`
+  static Future<Map<String, dynamic>?> createMenuItem(Map<String, dynamic> data) async {
+    try {
+      print('📤 createMenuItem payload: $data');
+      final response = await _client
+          .from('menu_items')
+          .insert(data)
+          .select()
+          .single();
+
+      print('✅ สร้างเมนูใหม่สำเร็จ: ${response['id']}');
+      return Map<String, dynamic>.from(response);
+    } catch (e, st) {
+      print('❌ Error creating menu item: $e');
+      print('🔎 StackTrace: $st');
+      // If PostgrestException-like object contains more fields, they will
+      // appear in the printed error. Return null to indicate failure.
+      return null;
+    }
+  }
+
+  /// อัปเดตเมนู (partial update supported)
+  static Future<bool> updateMenuItem(int menuItemId, Map<String, dynamic> updateData) async {
+    try {
+      print('📤 updateMenuItem id=$menuItemId payload: $updateData');
+      await _client
+          .from('menu_items')
+          .update(updateData)
+          .eq('id', menuItemId);
+
+      print('✅ อัปเดตเมนู #$menuItemId สำเร็จ');
+      return true;
+    } catch (e, st) {
+      print('❌ Error updating menu item: $e');
+      print('🔎 StackTrace: $st');
+      return false;
+    }
+  }
+
+  /// ลบเมนู
+  static Future<bool> deleteMenuItem(int menuItemId) async {
+    try {
+      print('🗑️ deleteMenuItem id=$menuItemId');
+      await _client
+          .from('menu_items')
+          .delete()
+          .eq('id', menuItemId);
+
+      print('✅ ลบเมนู #$menuItemId สำเร็จ');
+      return true;
+    } catch (e, st) {
+      print('❌ Error deleting menu item: $e');
+      print('🔎 StackTrace: $st');
+      return false;
+    }
+  }
+
   /// อัปเดต QR Code URL ใน restaurants table
-  static Future<bool> updateRestaurantQrCode(int restaurantId, String qrCodeUrl) async {
+  static Future<bool> updateRestaurantQrCode(int restaurantId, String? qrCodeUrl) async {
     try {
       await _client
           .from('restaurants')
@@ -643,6 +928,71 @@ class SupabaseService {
       return true;
     } catch (e) {
       print('❌ Error updating restaurant QR URL: $e');
+      return false;
+    }
+  }
+
+  /// อัปเดตสถานะเปิด/ปิดของร้าน (is_open)
+  /// ถ้า isManual = true แปลว่าผู้ใช้กดเปลี่ยนสถานะด้วยตนเอง (manual override)
+  static Future<bool> updateRestaurantIsOpen(int restaurantId, bool isOpen, {bool isManual = true, DateTime? expires}) async {
+    try {
+      final updateData = <String, dynamic>{
+        'is_open': isOpen,
+      };
+
+  // เก็บ flag ว่าเป็น manual override
+  updateData['is_open_manual'] = isManual;
+  // NOTE: expiry support has been disabled by project decision: manual
+  // overrides persist until explicitly changed by the merchant. The
+  // `manual_override_expires` column was removed by migration, so we do
+  // not attempt to write it here.
+
+      await _client
+          .from('restaurants')
+          .update(updateData)
+          .eq('id', restaurantId);
+
+      print('✅ อัปเดต is_open ของร้าน #$restaurantId -> $isOpen (manual=$isManual)');
+
+      // เขียนประวัติการเปลี่ยนแปลงลงตาราง restaurant_open_history (ถ้ามี)
+      try {
+        await _client.from('restaurant_open_history').insert({
+          'restaurant_id': restaurantId,
+          'is_open': isOpen,
+          'source': isManual ? 'manual' : 'system',
+          'changed_by': _client.auth.currentUser?.id,
+          'expires_at': null,
+        });
+        print('📝 บันทึกประวัติการเปลี่ยนแปลงสถานะร้านใน restaurant_open_history');
+      } catch (e) {
+        // ไม่ต้องล้มถ้า insert audit ล้ม — ปรับ log เท่านั้น
+        print('⚠️ ไม่สามารถบันทึกประวัติการเปลี่ยนแปลงสถานะร้าน: $e');
+      }
+      return true;
+    } catch (e) {
+      print('❌ Error updating restaurant is_open: $e');
+      return false;
+    }
+  }
+
+  /// อัปเดต opening_hour และ closing_hour ในตาราง restaurants
+  static Future<bool> updateRestaurantHours(int restaurantId, int? openingHour, int? closingHour) async {
+    try {
+      final updateData = <String, dynamic>{};
+      if (openingHour != null) updateData['opening_hour'] = openingHour;
+      else updateData['opening_hour'] = null;
+      if (closingHour != null) updateData['closing_hour'] = closingHour;
+      else updateData['closing_hour'] = null;
+
+      await _client
+          .from('restaurants')
+          .update(updateData)
+          .eq('id', restaurantId);
+
+      print('✅ อัปเดต opening_hour/closing_hour สำหรับร้าน #$restaurantId -> $openingHour..$closingHour');
+      return true;
+    } catch (e) {
+      print('❌ Error updating restaurant hours: $e');
       return false;
     }
   }
@@ -1372,26 +1722,56 @@ class SupabaseService {
   // (debug helper removed)
 
   /// ดึงเวลาทำอาหารเฉลี่ย
-  static Future<Map<String, dynamic>> getAverageProcessingTime(int restaurantId) async {
+  static Future<Map<String, dynamic>> getAverageProcessingTime(
+    int restaurantId, {
+    String period = 'week', // accepted: 'today', 'week', 'month'
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     try {
-      print('📊 กำลังคำนวณเวลาทำอาหารเฉลี่ยของร้าน $restaurantId...');
-      
+      print('📊 กำลังคำนวณเวลาทำอาหารเฉลี่ยของร้าน $restaurantId (period=$period)...');
+
       final now = DateTime.now();
-      final startDate = now.subtract(const Duration(days: 7));
-      
-      // แปลงเป็น UTC สำหรับ query
-      final startDateUtc = startDate.toUtc();
-      
-      // ดึง orders ที่มี timestamps ครบ
-      final response = await _client
-          .from('orders')
-          .select('created_at, confirmed_at, preparing_at, ready_at')
-          .eq('restaurant_id', restaurantId)
-          .gte('created_at', startDateUtc.toIso8601String())
-          .eq('status', 'completed')
-          .not('confirmed_at', 'is', null)
-          .not('preparing_at', 'is', null)
-          .not('ready_at', 'is', null);
+
+      // Determine start/end (local) according to period or explicit dates
+      DateTime localStart;
+      DateTime localEnd;
+
+      if (startDate != null && endDate != null) {
+        localStart = DateTime(startDate.year, startDate.month, startDate.day);
+        localEnd = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+      } else {
+        if (period == 'today') {
+          localStart = DateTime(now.year, now.month, now.day);
+          localEnd = localStart.add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
+        } else if (period == 'month') {
+          localStart = DateTime(now.year, now.month, 1);
+          localEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        } else {
+          // default: last 7 days (week)
+          localStart = now.subtract(const Duration(days: 7));
+          localEnd = now;
+        }
+      }
+
+      // Convert to UTC for querying
+      final startDateUtc = localStart.toUtc();
+      final endDateUtc = localEnd.toUtc();
+
+      print('🔍 AverageProcessingTime Query range (Local): $localStart to $localEnd');
+      print('🔍 AverageProcessingTime Query range (UTC): $startDateUtc to $endDateUtc');
+
+    // Query orders that are completed or ready. We require at least ready_at
+    // so we can compute some processing-time metrics even if status isn't
+    // 'completed' yet.
+    final response = await _client
+      .from('orders')
+      .select('created_at, confirmed_at, preparing_at, ready_at, status')
+      .eq('restaurant_id', restaurantId)
+      .gte('created_at', startDateUtc.toIso8601String())
+      .lte('created_at', endDateUtc.toIso8601String())
+      .inFilter('status', ['completed', 'ready'])
+      .not('ready_at', 'is', null);
       
       final orders = List<Map<String, dynamic>>.from(response);
       
@@ -1409,31 +1789,55 @@ class SupabaseService {
       double totalConfirmedToPreparing = 0;
       double totalPreparingToReady = 0;
       
+      // We'll compute each segment only for orders that have the two timestamps
+      // required for that segment. This makes the function tolerant to orders
+      // that are 'ready' but may be missing earlier timestamps.
+      int countPendingToConfirmed = 0;
+      int countConfirmedToPreparing = 0;
+      int countPreparingToReady = 0;
+
       for (var order in orders) {
-        final created = DateTime.parse(order['created_at']);
-        final confirmed = DateTime.parse(order['confirmed_at']);
-        final preparing = DateTime.parse(order['preparing_at']);
-        final ready = DateTime.parse(order['ready_at']);
-        
-        totalPendingToConfirmed += confirmed.difference(created).inMinutes;
-        totalConfirmedToPreparing += preparing.difference(confirmed).inMinutes;
-        totalPreparingToReady += ready.difference(preparing).inMinutes;
+        try {
+          final created = order['created_at'] != null ? DateTime.parse(order['created_at']) : null;
+          final confirmed = order['confirmed_at'] != null ? DateTime.parse(order['confirmed_at']) : null;
+          final preparing = order['preparing_at'] != null ? DateTime.parse(order['preparing_at']) : null;
+          final ready = order['ready_at'] != null ? DateTime.parse(order['ready_at']) : null;
+
+          if (created != null && confirmed != null) {
+            totalPendingToConfirmed += confirmed.difference(created).inMinutes;
+            countPendingToConfirmed++;
+          }
+          if (confirmed != null && preparing != null) {
+            totalConfirmedToPreparing += preparing.difference(confirmed).inMinutes;
+            countConfirmedToPreparing++;
+          }
+          if (preparing != null && ready != null) {
+            totalPreparingToReady += ready.difference(preparing).inMinutes;
+            countPreparingToReady++;
+          }
+        } catch (e) {
+          // Skip malformed dates for a given order
+          print('⚠️ Skipping order for avg time due to parse error: $e');
+        }
       }
-      
-      final count = orders.length;
-      final avgPendingToConfirmed = totalPendingToConfirmed / count;
-      final avgConfirmedToPreparing = totalConfirmedToPreparing / count;
-      final avgPreparingToReady = totalPreparingToReady / count;
+
+      final avgPendingToConfirmed = countPendingToConfirmed > 0 ? totalPendingToConfirmed / countPendingToConfirmed : 0.0;
+      final avgConfirmedToPreparing = countConfirmedToPreparing > 0 ? totalConfirmedToPreparing / countConfirmedToPreparing : 0.0;
+      final avgPreparingToReady = countPreparingToReady > 0 ? totalPreparingToReady / countPreparingToReady : 0.0;
+      // avgTotal: sum of available segment averages (keeps the same semantics)
       final avgTotal = avgPendingToConfirmed + avgConfirmedToPreparing + avgPreparingToReady;
-      
-      print('✅ เวลาเฉลี่ย: ${avgTotal.toStringAsFixed(1)} นาที (จาก $count orders)');
-      
+
+      // sample size: number of matched orders (those returned by the query)
+      final sampleSize = orders.length;
+
+      print('✅ เวลาเฉลี่ย: ${avgTotal.toStringAsFixed(1)} นาที (จาก $sampleSize orders) | segments counts: pendingToConfirmed=$countPendingToConfirmed, confirmedToPreparing=$countConfirmedToPreparing, preparingToReady=$countPreparingToReady');
+
       return {
         'pending_to_confirmed_minutes': avgPendingToConfirmed,
         'confirmed_to_preparing_minutes': avgConfirmedToPreparing,
         'preparing_to_ready_minutes': avgPreparingToReady,
         'total_minutes': avgTotal,
-        'sample_size': count,
+        'sample_size': sampleSize,
       };
     } catch (e) {
       print('❌ Error getting average processing time: $e');
@@ -1971,7 +2375,7 @@ class SupabaseService {
   }
 
   /// ดึงข้อมูล Peak Hours (ช่วงเวลาขายดี) พร้อมเวลาเปิด-ปิดร้าน
-  static Future<List<Map<String, dynamic>>> getPeakHoursWithBusinessHours(
+  static Future<Map<String, dynamic>> getPeakHoursWithBusinessHours(
     int restaurantId, {
     int days = 1,
   }) async {
@@ -1989,60 +2393,16 @@ class SupabaseService {
             .single();
 
         if (businessHoursResponse != null && businessHoursResponse is Map) {
-          // ลองหาคีย์ที่เป็นไปได้หลายแบบ
-          final possibleKeys = [
-            'opening_hour',
-            'openingHour',
-            'open_hour',
-            'openHour',
-            'opening_time',
-            'openingTime',
-            'open_time',
-            'openTime',
-          ];
-          final possibleCloseKeys = [
-            'closing_hour',
-            'closingHour',
-            'close_hour',
-            'closeHour',
-            'closing_time',
-            'closingTime',
-            'close_time',
-            'closeTime',
-          ];
+          // Use only the canonical integer columns `opening_hour` and `closing_hour`.
+          // Legacy text columns (open_time/close_time) are no longer considered.
+          final ohRaw = businessHoursResponse['opening_hour'];
+          final chRaw = businessHoursResponse['closing_hour'];
 
-          dynamic foundOpen;
-          for (var k in possibleKeys) {
-            if (businessHoursResponse.containsKey(k) && businessHoursResponse[k] != null) {
-              foundOpen = businessHoursResponse[k];
-              break;
-            }
+          if (ohRaw != null) {
+            openingHour = (ohRaw is int) ? ohRaw : (int.tryParse(ohRaw.toString()) ?? openingHour);
           }
-
-          dynamic foundClose;
-          for (var k in possibleCloseKeys) {
-            if (businessHoursResponse.containsKey(k) && businessHoursResponse[k] != null) {
-              foundClose = businessHoursResponse[k];
-              break;
-            }
-          }
-
-          if (foundOpen != null) {
-            // อาจเป็น int หรือ String HH:mm หรือ '08' เป็นต้น
-            if (foundOpen is int) {
-              openingHour = foundOpen;
-            } else if (foundOpen is String) {
-              final int? parsed = int.tryParse(foundOpen.split(':').first);
-              if (parsed != null) openingHour = parsed;
-            }
-          }
-          if (foundClose != null) {
-            if (foundClose is int) {
-              closingHour = foundClose;
-            } else if (foundClose is String) {
-              final int? parsed = int.tryParse(foundClose.split(':').first);
-              if (parsed != null) closingHour = parsed;
-            }
+          if (chRaw != null) {
+            closingHour = (chRaw is int) ? chRaw : (int.tryParse(chRaw.toString()) ?? closingHour);
           }
         }
 
@@ -2084,7 +2444,7 @@ class SupabaseService {
       }
 
       // แปลงเป็น list
-      final result = hourlyOrders.entries.map((e) {
+      final peakList = hourlyOrders.entries.map((e) {
         return {
           'hour': e.key,
           'order_count': e.value,
@@ -2092,14 +2452,26 @@ class SupabaseService {
         };
       }).toList()
         ..sort((a, b) => (a['hour'] as int).compareTo(b['hour'] as int));
-      
+
       // ตรวจสอบผลรวมที่นับได้
       final total = hourlyOrders.values.fold<int>(0, (a, b) => a + b);
       print('✅ ดึง Peak Hours พร้อมเวลาเปิด-ปิดร้านสำเร็จ - นับได้ $total ออเดอร์');
-      return result;
+
+      // คืนค่าเป็น Map ที่รวมทั้ง peak_hours และค่า opening/closing hour ที่อนุมานได้
+      return {
+        'peak_hours': peakList,
+        'opening_hour': openingHour,
+        'closing_hour': closingHour,
+        'total_count': total,
+      };
     } catch (e) {
       print('❌ Error getting peak hours with business hours: $e');
-      return [];
+      return {
+        'peak_hours': <Map<String, dynamic>>[],
+        'opening_hour': 8,
+        'closing_hour': 20,
+        'total_count': 0,
+      };
     }
   }
 }
