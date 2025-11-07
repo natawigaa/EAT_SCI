@@ -7,46 +7,48 @@ classDiagram
     class LoginScreen {
         + TextEditingController emailController
         + TextEditingController passwordController
-        + void _handleLogin()
-        + void _handleForgotPassword()
+        + Future<void> _handleLogin()
     }
 
     class SignUpScreen {
         + TextEditingController emailController
         + TextEditingController passwordController
-        + TextEditingController usernameController
-        + TextEditingController phoneController
         + Future<void> _signUp()
     }
 
     class HomeScreen {
+        + TextEditingController _searchController
+        + List<Map<String,dynamic>> restaurants
         + Future<void> loadRestaurants()
-        + void openRestaurant(int id)
+        + void openRestaurant(String restaurantId)
     }
 
     class DetailRestuarantScreen {
-        + int restaurantId
+        + String restaurantId
+        + String restaurantName
+        + List<Map<String,dynamic>> menuItems
         + Future<void> loadMenus()
-        + void addToCart(MenuItem)
+        + void addToCart(Map menuItem)
     }
 
     class OrderStatusScreen {
         + int orderId
-        + void subscribeRealtime()
-        + void refreshStatus()
-        + void cancelOrder(reason)
+        + List<Map<String,dynamic>> orders
+        + Future<void> refreshStatus()
     }
 
     class HistoryScreen {
         + String studentId
-        + Future<void> loadHistory() // includes completed + cancelled
-        + void openOrderDetails(orderId)
+        + List<Map<String,dynamic>> _completedOrders
+        + Future<void> loadHistory()
     }
 
     class EditProfileScreen {
+        + TextEditingController _usernameController
+        + TextEditingController _phoneController
+        + String? _profileImageUrl
         + Future<void> loadProfile()
         + Future<void> updateProfile(Map data)
-        + Future<String?> uploadProfileImage(file)
     }
 
     class OrderTrackingScreen {
@@ -62,11 +64,14 @@ classDiagram
 
     class FoodOrderScreen {
         + CartService cart
+        + List<Map<String,dynamic>> cartItems
+        + double totalAmount
         + void checkout()
     }
 
     class PaymentScreen {
-        + void showQRCode()
+        + double totalAmount
+        + int itemCount
         + Future<void> confirmPayment()
     }
 
@@ -76,9 +81,9 @@ classDiagram
     }
 
     class RestaurantDashboard {
+        + String restaurantId
+        + String restaurantName
         + void openOrdersTab()
-        + void manageMenu()
-        + void toggleOpenState()
     }
 
     %% Navigation relations

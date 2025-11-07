@@ -5,46 +5,47 @@
 classDiagram
 
     class HomeScreen {
+        + TextEditingController _searchController
+        + List<Map<String,dynamic>> restaurants
         + Future<void> loadRestaurants()
-        + void openRestaurant(int id)
-        + void openProfile()
+        + void openRestaurant(String restaurantId)
     }
 
     class DetailRestuarantScreen {
-        + int restaurantId
+        + String restaurantId
+        + String restaurantName
+        + List<Map<String,dynamic>> menuItems
         + Future<void> loadMenus()
-        + void addToCart(MenuItem)
-        + void openMenuDetail(menuId)
+        + void addToCart(Map menuItem)
     }
 
     class FoodOrderScreen {
         + CartService cart
+        + List<Map<String,dynamic>> cartItems
+        + double totalAmount
         + void checkout()
-        + void modifyItem(int index)
     }
 
     class PaymentScreen {
-        + void showQRCode()
+        + double totalAmount
+        + int itemCount
         + Future<void> confirmPayment()
-        + Future<void> downloadSlip()
     }
 
     class ProfileScreen {
         + Future<void> loadProfile()
         + Future<void> updateProfile()
-        + void openEditProfile()
     }
 
     class HistoryScreen {
         + String studentId
-        + Future<void> loadHistory() // includes completed + cancelled
-        + void openOrderDetails(orderId)
+        + List<Map<String,dynamic>> _completedOrders
+        + Future<void> loadHistory()
     }
 
     class OrderTrackingScreen {
         + int orderId
         + void subscribeToOrderRealtime()
-        + void stopTracking()
     }
 
     %% Auth Screens
