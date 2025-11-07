@@ -1,0 +1,48 @@
+%% Class diagram — Inner screens (detailed user flows)
+%% Generated: 2025-11-07
+%% Purpose: Screens that live inside flows (payment, profile edit, order tracking). Moderate detail on important state/actions.
+
+classDiagram
+
+    class PaymentScreen {
+        + double totalAmount
+        + int itemCount
+        + int restaurantId
+        + String restaurantName
+        + CartService _cartService
+        + bool _isCreatingOrder
+        + String? _restaurantQrCodeUrl
+        + Future<void> _loadStudentId()
+        + Future<void> _confirmPayment()
+        + Future<void> _uploadSlip()
+    }
+
+    class OrderStatusScreen {
+        + TabController _tabController
+        + List<Map<String,dynamic>> orders
+        + Future<void> _setupRealtime()
+        + Future<void> _cancelOrder(int orderId)
+        + Future<void> _confirmPickup(int orderId)
+    }
+
+    class HistoryScreenInner {
+        + String studentId
+        + List<Order> _readyOrders
+        + List<Order> _completedOrders
+        + Future<void> _loadOrders()
+        + Future<void> _confirmPickup(int orderId)
+    }
+
+    class EditProfileScreen {
+        + TextEditingController _usernameController
+        + TextEditingController _firstNameController
+        + TextEditingController _lastNameController
+        + TextEditingController _phoneController
+        + String? _profileImageUrl
+        + Future<void> _loadUserProfile()
+        + Future<void> _saveProfile()
+        + Future<String?> _uploadProfileImage(file)
+    }
+
+%% Cross-file note:
+%% - These inner screens rely on `SupabaseService` and `CartService` defined in `class_diagram_services_models.mmd`.

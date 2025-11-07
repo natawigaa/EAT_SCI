@@ -1,0 +1,93 @@
+%% Class diagram — Services & Models (core)
+%% Generated: 2025-11-07
+%% Purpose: Core backend-facing services and data shapes. Keep focused on fields/methods that affect behavior.
+
+classDiagram
+
+    %% Supabase and storage accessors
+    class SupabaseService {
+        - SupabaseClient _client
+        + Future<List<Map<String,dynamic>>> getRestaurants()
+        + Future<List<Map<String,dynamic>>> getMenuItems(int restaurantId)
+        + Future<Map<String,dynamic>?> createOrder(String studentId, int restaurantId, double totalAmount, List<Map> cartItems)
+        + Future<Map<String,dynamic>?> getOrderById(int orderId)
+        + Future<List<Map<String,dynamic>>> getStudentOrders(String studentId)
+        + Future<List<Map<String,dynamic>>> getRestaurantOrders(int restaurantId)
+        + Future<bool> updateOrderStatus(int orderId, String newStatus)
+        + Future<String?> uploadPaymentSlip(String filePath, int orderId)
+        + RealtimeChannel setupOrdersRealtimeSubscription(int restaurantId, Function onChange)
+        + Future<Map<String,dynamic>?> getStudentProfile(String studentId)
+        + Future<bool> updateStudentProfile(String studentId, Map<String,dynamic> data)
+    }
+
+    %% Cart state and helpers used across UI
+    class CartService {
+        - List<Map<String,dynamic>> _cartItems
+        + List<Map<String,dynamic>> cartItems
+        + int totalItems
+        + double totalAmount
+        + String? currentRestaurantId
+        + String? currentRestaurantName
+        + void addToCart(Map menuItem, String restaurantId, String restaurantName)
+        + void removeFromCart(int index)
+        + void clearCart()
+        + void increaseQuantity(int index)
+        + void decreaseQuantity(int index)
+        + void updateSpecialRequest(int index, String request)
+    }
+
+    %% Core data shapes
+    class StudentUser {
+        + String userId
+        + String studentId
+        + String fullName
+        + String email
+        + String? phoneNumber
+        + String? profileImageUrl
+        + bool isStudentVerified
+    }
+
+    class MenuItem {
+        + int id
+        + String name
+        + double price
+        + String? imageUrl
+        + String category
+        + bool isAvailable
+    }
+
+    class Order {
+        + int id
+        + String studentId
+        + int restaurantId
+        + double totalAmount
+        + int totalItems
+        + String status
+        + String? paymentSlipUrl
+        + DateTime? createdAt
+        + List<OrderItem> items
+    }
+
+    class OrderItem {
+        + int id
+        + int orderId
+        + String foodName
+        + double price
+        + int quantity
+    }
+
+    class RealtimeChannel {
+        + String channelName
+        + subscribe()
+        + onChange(callback)
+        + unsubscribe()
+    }
+
+    %% Associations (short labels only)
+    SupabaseService ..> MenuItem : fetches
+    SupabaseService ..> Order : creates/updates
+    CartService o-- OrderItem : contains
+
+%% Cross-file note:
+%% - UI screens (in `ui_screens.mmd`) depend on `CartService` and `SupabaseService` methods listed here.
+%% - Dashboard diagrams (orders/reports) also call `SupabaseService` methods above; see respective dashboard files for cross-file relationships.

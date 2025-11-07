@@ -1,4 +1,4 @@
-%% Class diagram — Dashboard: Orders-focused
+%% Class diagram — Dashboard: Orders-focused (recreated)
 %% Generated: 2025-11-07
 %% Purpose: Focused view for order management and realtime flow under lib/dashboard
 
@@ -8,7 +8,6 @@ classDiagram
         + String restaurantId
         + String restaurantName
         + build(context)
-        + _buildMainContent()
     }
 
     class OrdersManagementScreen {
@@ -37,27 +36,10 @@ classDiagram
 
     class SupabaseService {
         + getRestaurantOrders(restaurantId)
-        + getPendingSlipOrders(restaurantId)
         + setupOrdersRealtimeSubscription(restaurantId, callback)
         + updateOrderStatus(orderId, status)
         + cancelOrder(orderId, reason)
-        + confirmOrderSlip(orderId, userId)
-        + rejectOrderSlip(orderId, reason)
     }
 
-    class NotificationHelper {
-        + showSuccess(context, msg)
-        + showError(context, msg)
-        + showInfo(context, msg)
-    }
-
-    %% Relationships
-    RestaurantDashboardV2 "1" o-- "*" OrdersTab : contains
-    OrdersManagementScreen ..> SupabaseService : getRestaurantOrders / updateOrderStatus / cancelOrder
-    OrdersManagementScreen ..> NotificationHelper : showSuccess / showError
-    OrdersTab ..> SupabaseService : getPendingSlipOrders / confirmOrderSlip / rejectOrderSlip
-    RealtimeChannel <.. OrdersManagementScreen : restaurantOrdersChannel
-    RealtimeChannel <.. OrdersTab : optionalRealtime
-
-    %% Notes
-    %% - Use this diagram to understand realtime order routing and the actions restaurants perform (confirm/prepare/ready/cancel).
+    %% Cross-file note:
+    %% - Uses SupabaseService methods defined in `class_diagram_services_models.mmd` (getRestaurantOrders, updateOrderStatus, etc.)

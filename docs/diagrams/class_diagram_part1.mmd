@@ -10,7 +10,8 @@ classDiagram
         + Future<List<Map<String,dynamic>>> getMenuItems(int restaurantId)
         + Future<Map<String,dynamic>?> createOrder(String studentId, int restaurantId, double totalAmount, List<Map> cartItems)
         + Future<Map<String,dynamic>?> getOrderById(int orderId)
-        + Future<Map<String,dynamic>?> getStudentProfile(String studentId)
+        + Future<List<Map<String,dynamic>>> getStudentOrders(String studentId)
+        + Future<List<Map<String,dynamic>>> getRestaurantOrders(int restaurantId)
         + Future<bool> updateOrderStatus(int orderId, String newStatus)
         + Future<String?> uploadPaymentSlip(String filePath, int orderId)
         + RealtimeChannel setupOrdersRealtimeSubscription(int restaurantId, Function onNewOrder)
@@ -22,6 +23,7 @@ classDiagram
         + int get totalItems
         + double get totalAmount
         + String? get currentRestaurantId
+        + String? get currentRestaurantName
         + bool hasItemsFromDifferentRestaurant(String restaurantId)
         + void addToCart(Map<String,dynamic> menuItem, String restaurantId, String restaurantName)
         + void removeFromCart(int index)
