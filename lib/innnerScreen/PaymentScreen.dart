@@ -8,7 +8,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 
 class PaymentScreen extends StatefulWidget {
   final double totalAmount;
@@ -35,7 +36,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _isLoadingQr = true;
   
   // สำหรับอัปโหลดสลิป
-  File? _selectedSlipImage;
+  Uint8List? _selectedSlipBytes;
+  String? _selectedSlipFileName;
   bool _isUploadingSlip = false;
   int? _createdOrderId; // เก็บ order ID หลังสร้างเสร็จ
   
@@ -389,7 +391,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Container(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: (_selectedSlipImage != null && !_isUploadingSlip && !_isCreatingOrder)
+  onPressed: (_selectedSlipBytes != null && !_isUploadingSlip && !_isCreatingOrder)
             ? _confirmPaymentWithSlip
             : null,
         style: ElevatedButton.styleFrom(
@@ -411,11 +413,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
               )
             : Text(
-                _selectedSlipImage == null 
-                    ? 'กรุณาเลือกสลิปการโอนเงิน' 
-                    : 'ยืนยันการชำระเงิน',
+        _selectedSlipBytes == null 
+          ? 'กรุณาเลือกสลิปการโอนเงิน' 
+          : 'ยืนยันการชำระเงิน',
                 style: TextStyle(
-                  color: _selectedSlipImage == null ? Colors.grey.shade600 : Colors.white,
+                  color: _selectedSlipBytes == null ? Colors.grey.shade600 : Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -474,12 +476,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
             const SizedBox(height: 16),
 
             // แสดงภาพที่เลือก
-            if (_selectedSlipImage != null) ...[
+            if (_selectedSlipBytes != null) ...[
               Center(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.file(
-                    _selectedSlipImage!,
+                  child: Image.memory(
+                    _selectedSlipBytes!,
                     width: 200,
                     height: 300,
                     fit: BoxFit.cover,
@@ -496,7 +498,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 onPressed: _isUploadingSlip ? null : _pickSlipImage,
                 icon: const Icon(Icons.image),
                 label: Text(
-                  _selectedSlipImage == null
+                  _selectedSlipBytes == null
                       ? 'เลือกภาพสลิป'
                       : 'เปลี่ยนภาพสลิป',
                 ),
@@ -526,10 +528,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
       );
 
       if (image != null) {
+        // Read bytes for both web and non-web so we can display via Image.memory
+        final bytes = await image.readAsBytes();
         setState(() {
-          _selectedSlipImage = File(image.path);
+          _selectedSlipBytes = bytes;
+          _selectedSlipFileName = image.name;
         });
-        print('✅ เลือกภาพสลิป: ${image.path}');
+        print('✅ เลือกภาพสลิป: ${image.name} (bytes: ${bytes.lengthInBytes} bytes)');
       }
     } catch (e) {
       print('❌ Error picking image: $e');
@@ -538,7 +543,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _uploadSlip() async {
-    if (_selectedSlipImage == null || _createdOrderId == null) return;
+    if (_selectedSlipBytes == null || _createdOrderId == null) return;
 
     setState(() {
       _isUploadingSlip = true;
@@ -546,8 +551,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     try {
       // 1. อัปโหลดไฟล์ไป Supabase Storage
-      final slipUrl = await SupabaseService.uploadPaymentSlip(
-        _selectedSlipImage!.path,
+      final slipUrl = await SupabaseService.uploadPaymentSlipBytes(
+        _selectedSlipBytes!,
+        _selectedSlipFileName ?? 'slip.jpg',
         _createdOrderId!,
       );
 
@@ -656,7 +662,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   // ฟังก์ชันใหม่: อัปโหลดสลิป + สร้าง order พร้อมกัน
   Future<void> _confirmPaymentWithSlip() async {
-    if (_selectedSlipImage == null) {
+    if (_selectedSlipBytes == null) {
       NotificationHelper.showWarning(
         context,
         'กรุณาเลือกสลิปการโอนเงินก่อน',
@@ -705,9 +711,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
       print('🔄 ขั้นตอนที่ 2: อัปโหลดสลิป...');
       
-      // ขั้นตอนที่ 2: อัปโหลดสลิป
-      final slipUrl = await SupabaseService.uploadPaymentSlip(
-        _selectedSlipImage!.path,
+      // ขั้นตอนที่ 2: อัปโหลดสลิป (bytes)
+      final slipUrl = await SupabaseService.uploadPaymentSlipBytes(
+        _selectedSlipBytes!,
+        _selectedSlipFileName ?? 'slip.jpg',
         orderId,
       );
 
