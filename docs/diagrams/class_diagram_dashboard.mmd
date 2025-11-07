@@ -37,7 +37,6 @@ classDiagram
 
     class ReportsTab {
         + String restaurantId
-        + String restaurantName
         + _loadData()
         + _onPeriodChanged(period)
         + _buildSummaryCards()
@@ -45,37 +44,27 @@ classDiagram
 
     class ReportsScreen {
         + int restaurantId
-        + String restaurantName
-        + TabController _tabController
         + build(context)
     }
 
     class SalesReportTab {
         + int restaurantId
-        + String restaurantName
         + _loadData()
-        + _exportExcel()
         + _buildWeeklySalesChart()
     }
 
     class DailySalesReportScreen {
         + int restaurantId
-        + String restaurantName
-        + DateTime _selectedDate
         + _loadDailySales()
-        + _generatePDF()
     }
 
     class DateRangePicker {
         + String selectedPeriod
-        + DateTime? customStartDate
-        + DateTime? customEndDate
         + onPeriodChanged(period, start, end)
     }
 
     class MenuManagementTab {
         + String restaurantId
-        + uploadMenuImage(file)
         + getMenuItems()
     }
 
