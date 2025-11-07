@@ -1,0 +1,63 @@
+%% Class diagram — Dashboard: Orders-focused
+%% Generated: 2025-11-07
+%% Purpose: Focused view for order management and realtime flow under lib/dashboard
+
+classDiagram
+
+    class RestaurantDashboardV2 {
+        + String restaurantId
+        + String restaurantName
+        + build(context)
+        + _buildMainContent()
+    }
+
+    class OrdersManagementScreen {
+        + int restaurantId
+        + _loadOrders()
+        + _setupRealtimeSubscription()
+        + _showOrderDetails(order)
+        + _confirmOrder(orderId)
+        + _startPreparing(orderId)
+        + _markAsReady(orderId)
+        + _cancelOrder(orderId)
+    }
+
+    class OrdersTab {
+        + _loadOrders()
+        + _buildOrderCard(order)
+        + _confirmOrder(orderId)
+        + _rejectOrder(orderId)
+    }
+
+    class RealtimeChannel {
+        + subscribe(channel)
+        + onChange(callback)
+        + unsubscribe()
+    }
+
+    class SupabaseService {
+        + getRestaurantOrders(restaurantId)
+        + getPendingSlipOrders(restaurantId)
+        + setupOrdersRealtimeSubscription(restaurantId, callback)
+        + updateOrderStatus(orderId, status)
+        + cancelOrder(orderId, reason)
+        + confirmOrderSlip(orderId, userId)
+        + rejectOrderSlip(orderId, reason)
+    }
+
+    class NotificationHelper {
+        + showSuccess(context, msg)
+        + showError(context, msg)
+        + showInfo(context, msg)
+    }
+
+    %% Relationships
+    RestaurantDashboardV2 "1" o-- "*" OrdersTab : contains
+    OrdersManagementScreen ..> SupabaseService : getRestaurantOrders / updateOrderStatus / cancelOrder
+    OrdersManagementScreen ..> NotificationHelper : showSuccess / showError
+    OrdersTab ..> SupabaseService : getPendingSlipOrders / confirmOrderSlip / rejectOrderSlip
+    RealtimeChannel <.. OrdersManagementScreen : restaurantOrdersChannel
+    RealtimeChannel <.. OrdersTab : optionalRealtime
+
+    %% Notes
+    %% - Use this diagram to understand realtime order routing and the actions restaurants perform (confirm/prepare/ready/cancel).

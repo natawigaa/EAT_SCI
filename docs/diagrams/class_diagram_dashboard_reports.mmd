@@ -1,0 +1,60 @@
+%% Class diagram — Dashboard: Reports-focused
+%% Generated: 2025-11-07
+%% Purpose: Focused view for reporting and analytics screens under lib/dashboard
+
+classDiagram
+
+    class ReportsScreen {
+        + int restaurantId
+        + build(context)
+    }
+
+    class ReportsTab {
+        + String restaurantId
+        + _loadData()
+        + _onPeriodChanged(period)
+        + _buildSummaryCards()
+    }
+
+    class SalesReportTab {
+        + int restaurantId
+        + _loadData()
+        + _buildWeeklySalesChart()
+        + _exportCsv()
+    }
+
+    class DailySalesReportScreen {
+        + int restaurantId
+        + _loadDailySales()
+    }
+
+    class DateRangePicker {
+        + String selectedPeriod
+        + onPeriodChanged(period, start, end)
+    }
+
+    class MenuManagementTab {
+        + String restaurantId
+        + getMenuItems()
+    }
+
+    class SupabaseService {
+        + getWeeklySales(restaurantId)
+        + getTopMenus(restaurantId, days, limit)
+        + getPeakHours(restaurantId)
+        + getSalesByPeriod(restaurantId, period)
+        + getSalesByCustomDateRange(restaurantId, start, end)
+        + getAverageProcessingTime(restaurantId, period)
+        + getPeriodComparison(restaurantId, period)
+        + getMenuItems(restaurantId)
+    }
+
+    %% Relationships
+    ReportsScreen "1" o-- "*" ReportsTab : contains
+    ReportsTab ..> SupabaseService : getWeeklySales / getTopMenus / getPeakHours
+    SalesReportTab ..> SupabaseService : getSalesByPeriod / getPeriodComparison
+    DailySalesReportScreen ..> SupabaseService : getSalesByCustomDateRange
+    MenuManagementTab ..> SupabaseService : getMenuItems
+
+    %% Notes
+    %% - This diagram isolates reporting concerns (time ranges, exports, charts) separate from order management.
