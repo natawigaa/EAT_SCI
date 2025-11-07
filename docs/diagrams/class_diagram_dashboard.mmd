@@ -1,0 +1,148 @@
+%% Class diagram — Dashboard (detailed)
+%% Generated: 2025-11-07
+%% Purpose: Detailed class-level view for everything under lib/dashboard
+classDiagram
+
+    %% Main dashboard containers
+    class RestaurantDashboardV2 {
+        + String restaurantId
+        + String restaurantName
+        + build(context)
+        + _buildAppBar()
+        + _buildBottomNavigationBar()
+        + _buildMainContent()
+    }
+
+    class OrdersManagementScreen {
+        + int restaurantId
+        + String restaurantName
+        + initState()
+        + dispose()
+        + _loadOrders()
+        + _setupRealtimeSubscription()
+        + _showOrderDetails(order)
+        + _confirmOrder(orderId)
+        + _startPreparing(orderId)
+        + _markAsReady(orderId)
+        + _showCancelDialog(orderId)
+    }
+
+    class OrdersTab {
+        + String restaurantId
+        + _loadOrders()
+        + _buildOrderCard(order)
+        + _confirmOrder(orderId)
+        + _rejectOrder(orderId)
+    }
+
+    class ReportsTab {
+        + String restaurantId
+        + String restaurantName
+        + _loadData()
+        + _onPeriodChanged(period)
+        + _buildSummaryCards()
+    }
+
+    class ReportsScreen {
+        + int restaurantId
+        + String restaurantName
+        + TabController _tabController
+        + build(context)
+    }
+
+    class SalesReportTab {
+        + int restaurantId
+        + String restaurantName
+        + _loadData()
+        + _exportExcel()
+        + _buildWeeklySalesChart()
+    }
+
+    class DailySalesReportScreen {
+        + int restaurantId
+        + String restaurantName
+        + DateTime _selectedDate
+        + _loadDailySales()
+        + _generatePDF()
+    }
+
+    class DateRangePicker {
+        + String selectedPeriod
+        + DateTime? customStartDate
+        + DateTime? customEndDate
+        + onPeriodChanged(period, start, end)
+    }
+
+    class MenuManagementTab {
+        + String restaurantId
+        + uploadMenuImage(file)
+        + getMenuItems()
+    }
+
+    class SettingsTab {
+        + String restaurantId
+        + String restaurantName
+        + build(context)
+        + toggleOpenState()
+    }
+
+    %% Services and helpers used heavily by dashboard
+    class SupabaseService {
+        + getRestaurantOrders(restaurantId)
+        + getPendingSlipOrders(restaurantId)
+        + setupOrdersRealtimeSubscription(restaurantId, callback)
+        + updateOrderStatus(orderId, status)
+        + cancelOrder(orderId, reason)
+        + confirmOrderSlip(orderId, userId)
+        + rejectOrderSlip(orderId, reason)
+        + getWeeklySales(restaurantId)
+        + getTopMenus(restaurantId, days, limit)
+        + getPeakHours(restaurantId)
+        + getSalesByPeriod(restaurantId, period)
+        + getSalesByCustomDateRange(restaurantId, start, end)
+        + getAverageProcessingTime(restaurantId, period)
+        + getPeriodComparison(restaurantId, period)
+    }
+
+    class NotificationHelper {
+        + showSuccess(context, msg)
+        + showError(context, msg)
+        + showInfo(context, msg)
+        + showWarning(context, msg)
+    }
+
+    %% Realtime and DB concepts
+    class RealtimeChannel {
+        + subscribe()
+        + onChange(callback)
+        + unsubscribe()
+    }
+
+    %% Relationships (usage / composition)
+    RestaurantDashboardV2 "1" o-- "*" OrdersTab : contains
+    RestaurantDashboardV2 "1" o-- "1" ReportsTab : contains
+    RestaurantDashboardV2 "1" o-- "1" MenuManagementTab : contains
+    RestaurantDashboardV2 "1" o-- "1" SettingsTab : contains
+
+    OrdersManagementScreen ..> SupabaseService : "getRestaurantOrders/updateOrderStatus/cancelOrder"
+    OrdersManagementScreen ..> NotificationHelper : "showSuccess/showError/showInfo"
+    OrdersManagementScreen ..> RealtimeChannel : "setupOrdersRealtimeSubscription -> RealtimeChannel"
+
+    OrdersTab ..> SupabaseService : "getPendingSlipOrders/confirmOrderSlip/rejectOrderSlip"
+    OrdersTab ..> NotificationHelper : "showSuccess/showError"
+
+    ReportsTab ..> SupabaseService : "getWeeklySales/getTopMenus/getPeakHours/getSalesByPeriod/getPeriodComparison"
+    SalesReportTab ..> SupabaseService : "getWeeklySales/getSalesByPeriod/getPeriodComparison/getSalesByCustomDateRange"
+    SalesReportTab ..> DateRangePicker : "onPeriodChanged"
+    DailySalesReportScreen ..> Database : directQueriesForDailyReport
+    DailySalesReportScreen ..> SupabaseService : optionalHelpers
+
+    MenuManagementTab ..> SupabaseService : "uploadMenuImage/getMenuItems"
+
+    %% UI patterns: realtime flow
+    RealtimeChannel <.. OrdersManagementScreen : restaurantOrdersChannel
+    RealtimeChannel <.. OrdersTab : optionalRealtime
+
+    %% Notes
+    %% - Dashboard screens rely on SupabaseService for data and on NotificationHelper for user feedback.
+    %% - Orders lifecycle actions (confirm/preparing/ready/cancel) flow through SupabaseService.updateOrderStatus or dedicated helpers.

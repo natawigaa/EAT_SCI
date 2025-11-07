@@ -1,0 +1,111 @@
+%% Class diagram — Part 2: UI Screens & Navigation
+%% Generated: 2025-11-07
+%% Purpose: show main screens, navigation flows and relationships to services
+
+classDiagram
+
+    class LoginScreen {
+        + TextEditingController emailController
+        + TextEditingController passwordController
+        + void _handleLogin()
+        + void _handleForgotPassword()
+    }
+
+    class SignUpScreen {
+        + TextEditingController emailController
+        + TextEditingController passwordController
+        + TextEditingController usernameController
+        + TextEditingController phoneController
+        + Future<void> _signUp()
+    }
+
+    class HomeScreen {
+        + Future<void> loadRestaurants()
+        + void openRestaurant(int id)
+    }
+
+    class DetailRestuarantScreen {
+        + int restaurantId
+        + Future<void> loadMenus()
+        + void addToCart(MenuItem)
+    }
+
+    class OrderStatusScreen {
+        + int orderId
+        + void subscribeRealtime()
+        + void refreshStatus()
+        + void cancelOrder(reason)
+    }
+
+    class HistoryScreen {
+        + String studentId
+        + Future<void> loadHistory() // includes completed + cancelled
+        + void openOrderDetails(orderId)
+    }
+
+    class EditProfileScreen {
+        + Future<void> loadProfile()
+        + Future<void> updateProfile(Map data)
+        + Future<String?> uploadProfileImage(file)
+    }
+
+    class OrderTrackingScreen {
+        + int orderId
+        + void subscribeToOrderRealtime()
+        + void stopTracking()
+    }
+
+    class CompleteProfileScreen {
+        + Future<void> submitAdditionalInfo(Map data)
+        + void navigateToHome()
+    }
+
+    class FoodOrderScreen {
+        + CartService cart
+        + void checkout()
+    }
+
+    class PaymentScreen {
+        + void showQRCode()
+        + Future<void> confirmPayment()
+    }
+
+    class ProfileScreen {
+        + Future<void> loadProfile()
+        + Future<void> updateProfile()
+    }
+
+    class RestaurantDashboard {
+        + void openOrdersTab()
+        + void manageMenu()
+        + void toggleOpenState()
+    }
+
+    %% Navigation relations
+    LoginScreen --> SignUpScreen : "navigate to"
+    LoginScreen --> HomeScreen : "on success"
+    SignUpScreen --> HomeScreen : "on success"
+    HomeScreen --> DetailRestuarantScreen : "open restaurant"
+    DetailRestaurantScreen --> FoodOrderScreen : "add to cart -> open cart"
+    FoodOrderScreen --> PaymentScreen : "checkout -> payment"
+    HomeScreen --> ProfileScreen : "profile action"
+
+    HomeScreen --> HistoryScreen : "open history"
+    HomeScreen --> OrderTrackingScreen : "track order"
+    HomeScreen --> OrderStatusScreen : "quick status"
+    ProfileScreen --> EditProfileScreen : "edit profile"
+    SignUpScreen --> CompleteProfileScreen : "complete profile"
+    PaymentScreen --> OrderTrackingScreen : "view tracking"
+
+    %% Service usage
+    LoginScreen ..> SupabaseService : "auth"
+    SignUpScreen ..> SupabaseService : "auth + create student"
+    HomeScreen ..> SupabaseService : "getRestaurants"
+    DetailRestuarantScreen ..> SupabaseService : "getMenuItems"
+    FoodOrderScreen ..> CartService : "read/modify cart"
+    PaymentScreen ..> SupabaseService : "createOrder + payment flow"
+    OrderStatusScreen ..> SupabaseService : "getOrder/getOrderRealtime/cancelOrder"
+    HistoryScreen ..> SupabaseService : "getStudentOrders/getCompletedAndCancelledOrders"
+    EditProfileScreen ..> SupabaseService : "getStudentProfile/updateStudentProfile/uploadProfileImage"
+    OrderTrackingScreen ..> SupabaseService : "setupOrderRealtimeSubscription"
+    CompleteProfileScreen ..> SupabaseService : "updateStudentProfile"

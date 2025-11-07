@@ -1,0 +1,79 @@
+%% Class diagram — Inner screens (lib/innnerScreen)
+%% Generated: 2025-11-07
+%% Purpose: Per-folder diagram for inner screens under lib/innnerScreen
+
+classDiagram
+
+    class PaymentScreen {
+        + double totalAmount
+        + int itemCount
+        + int restaurantId
+        + String restaurantName
+        + _cartService
+        + bool _isCreatingOrder
+        + String? _restaurantQrCodeUrl
+        + bool _isLoadingQr
+        + File? _selectedSlipImage
+        + bool _isUploadingSlip
+        + int? _createdOrderId
+        + String? _studentId
+        + Future<void> _loadStudentId()
+        + Future<void> _loadRestaurantQrCode()
+        + Future<void> _pickSlipImage()
+        + Future<void> _uploadSlip()
+        + Future<void> _confirmPaymentWithSlip()
+        + Future<void> _confirmPayment()
+        + Future<void> _downloadQRCode()
+        + void _showSlipUploadedDialog()
+    }
+
+    class OrderStatusScreen {
+        + TabController _tabController
+        + List orders
+        + Future<void> getOrdersByStatus(status)
+        + Future<void> _cancelOrder(int orderId)
+        + Future<void> _confirmPickup(int orderId)
+        + void _viewOrderDetails(int orderId)
+        + void _reorder(int orderId)
+    }
+
+    class HistoryScreenInner {
+        + String studentId
+        + List _readyOrders
+        + List _completedOrders
+        + bool _isLoading
+        + TabController _tabController
+        + Future<void> _initialize()
+        + Future<void> _loadOrders()
+        + Future<void> _confirmPickup(int orderId)
+    }
+
+    class EditProfileScreen {
+        + TextEditingController _usernameController
+        + TextEditingController _firstNameController
+        + TextEditingController _lastNameController
+        + TextEditingController _phoneController
+        + bool _isLoading
+        + bool _hasChanges
+        + String? _studentId
+        + String? _email
+        + String? _faculty
+        + String? _year
+        + String? _profileImageUrl
+        + File? _selectedImageFile
+        + Future<void> _loadUserProfile()
+        + Future<void> _pickImageFromCamera()
+        + Future<void> _pickImageFromGallery()
+        + Future<void> _deleteProfileImage()
+        + Future<void> _saveProfile()
+    }
+
+    %% Interactions
+    PaymentScreen ..> SupabaseService : createOrder / uploadPaymentSlip / updateOrderWithSlip
+    OrderStatusScreen ..> SupabaseService : getOrder / updateOrderStatus / setupOrderRealtimeSubscription
+    HistoryScreenInner ..> SupabaseService : getReadyOrders / getOrderHistory
+    EditProfileScreen ..> SupabaseService : getStudentProfile / updateStudentProfile / uploadProfileImage
+
+    %% UI placement
+    OrderStatusScreen --> HomeScreen : openFromNotifications
+    HistoryScreenInner --> ProfileScreen : profileHistoryTab

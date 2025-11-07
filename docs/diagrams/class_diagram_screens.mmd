@@ -1,0 +1,81 @@
+%% Class diagram — Screens (lib/screen)
+%% Generated: 2025-11-07
+%% Purpose: Per-folder diagram for screens under lib/screen
+
+classDiagram
+
+    class HomeScreen {
+        + Future<void> loadRestaurants()
+        + void openRestaurant(int id)
+        + void openProfile()
+    }
+
+    class DetailRestuarantScreen {
+        + int restaurantId
+        + Future<void> loadMenus()
+        + void addToCart(MenuItem)
+        + void openMenuDetail(menuId)
+    }
+
+    class FoodOrderScreen {
+        + CartService cart
+        + void checkout()
+        + void modifyItem(int index)
+    }
+
+    class PaymentScreen {
+        + void showQRCode()
+        + Future<void> confirmPayment()
+        + Future<void> downloadSlip()
+    }
+
+    class ProfileScreen {
+        + Future<void> loadProfile()
+        + Future<void> updateProfile()
+        + void openEditProfile()
+    }
+
+    class HistoryScreen {
+        + String studentId
+        + Future<void> loadHistory() // includes completed + cancelled
+        + void openOrderDetails(orderId)
+    }
+
+    class OrderTrackingScreen {
+        + int orderId
+        + void subscribeToOrderRealtime()
+        + void stopTracking()
+    }
+
+    %% Auth Screens
+    class LoginScreen {
+        + void _handleLogin()
+        + void _handleForgotPassword()
+    }
+
+    class SignUpScreen {
+        + Future<void> _signUp()
+    }
+
+    class CompleteProfileScreen {
+        + Future<void> submitAdditionalInfo(Map data)
+    }
+
+    %% Service usage
+    HomeScreen ..> SupabaseService : "getRestaurants"
+    DetailRestuarantScreen ..> SupabaseService : "getMenuItems"
+    FoodOrderScreen ..> CartService : "cart operations"
+    PaymentScreen ..> SupabaseService : "createOrder + payment flow"
+    ProfileScreen ..> SupabaseService : "getStudentProfile/updateProfile"
+    HistoryScreen ..> SupabaseService : "getStudentOrders/getCompletedAndCancelledOrders"
+    OrderTrackingScreen ..> SupabaseService : "setupOrderRealtimeSubscription"
+    LoginScreen ..> SupabaseService : "auth"
+    SignUpScreen ..> SupabaseService : "auth + create student"
+
+    %% Navigation (high level)
+    HomeScreen --> DetailRestuarantScreen : "open restaurant"
+    DetailRestuarantScreen --> FoodOrderScreen : "add to cart -> open cart"
+    FoodOrderScreen --> PaymentScreen : "checkout -> payment"
+    HomeScreen --> ProfileScreen : "profile action"
+    HomeScreen --> HistoryScreen : "open history"
+    HomeScreen --> OrderTrackingScreen : "track order"
