@@ -2179,13 +2179,35 @@ class _MenuManagementTabState extends State<MenuManagementTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'ชื่อเมนู')),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'ชื่อเมนู'),
+                  onChanged: (s) => print('onChanged [RestaurantDashboardV2.editMenu.name]: "$s"'),
+                  onEditingComplete: () => print('editingComplete [RestaurantDashboardV2.editMenu.name] -> "${nameCtrl.text}"'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ราคา')),
+                TextField(
+                  controller: priceCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'ราคา'),
+                  onChanged: (s) => print('onChanged [RestaurantDashboardV2.editMenu.price]: "$s"'),
+                  onEditingComplete: () => print('editingComplete [RestaurantDashboardV2.editMenu.price] -> "${priceCtrl.text}"'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: categoryCtrl, decoration: const InputDecoration(labelText: 'หมวดหมู่')),
+                TextField(
+                  controller: categoryCtrl,
+                  decoration: const InputDecoration(labelText: 'หมวดหมู่'),
+                  onChanged: (s) => print('onChanged [RestaurantDashboardV2.editMenu.category]: "$s"'),
+                  onEditingComplete: () => print('editingComplete [RestaurantDashboardV2.editMenu.category] -> "${categoryCtrl.text}"'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'คำอธิบาย (ไม่บังคับ)')),
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'คำอธิบาย (ไม่บังคับ)'),
+                  onChanged: (s) => print('onChanged [RestaurantDashboardV2.editMenu.description]: "$s"'),
+                  onEditingComplete: () => print('editingComplete [RestaurantDashboardV2.editMenu.description] -> "${descCtrl.text}"'),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [

@@ -601,6 +601,9 @@ class _FoodOrderScreenState extends State<FoodOrderScreen> {
               TextField(
                 controller: controller,
                 maxLines: 3,
+                // Debug: log changes to help diagnose IME/composition issues (Thai input)
+                onChanged: (s) => print('onChanged [FoodOrderScreen.editItem.specialRequest]: "$s"'),
+                onEditingComplete: () => print('editingComplete [FoodOrderScreen.editItem.specialRequest] -> "${controller.text}"'),
                 decoration: const InputDecoration(
                   hintText: 'ระบุคำขอพิเศษ เช่น ขอเผ็ดน้อย, ไม่ใส่ผัก',
                 ),

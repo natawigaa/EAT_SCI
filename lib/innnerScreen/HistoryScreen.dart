@@ -67,18 +67,35 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
 
     try {
       print('📦 กำลังดึงประวัติ orders ของ student $_studentId...');
-      
-      final results = await Future.wait([
-        SupabaseService.getReadyOrders(_studentId!),
-        SupabaseService.getOrderHistory(_studentId!, days: 7),
-      ]);
-      
+      // Load ready orders
+      final readyFuture = SupabaseService.getReadyOrders(_studentId!);
+
+      // Load completed + cancelled orders (we'll filter to last 7 days)
+      final completedCancelledFuture = SupabaseService.getCompletedAndCancelledOrders(_studentId!);
+
+      final results = await Future.wait([readyFuture, completedCancelledFuture]);
+
+      final List<Map<String, dynamic>> ready = results[0];
+      final List<Map<String, dynamic>> completedAndCancelled = results[1];
+
+      // Filter to last 7 days to match previous behaviour
+      final DateTime startDate = DateTime.now().subtract(const Duration(days: 7));
+      final filtered = completedAndCancelled.where((order) {
+        try {
+          final created = order['created_at'] != null ? DateTime.parse(order['created_at']).toLocal() : null;
+          if (created == null) return false;
+          return created.isAfter(startDate);
+        } catch (e) {
+          return false;
+        }
+      }).toList();
+
       setState(() {
-        _readyOrders = results[0];
-        _completedOrders = results[1];
+        _readyOrders = ready;
+        _completedOrders = filtered;
       });
-      
-      print('✅ โหลด ${_readyOrders.length} ready orders และ ${_completedOrders.length} completed orders สำเร็จ');
+
+      print('✅ โหลด ${_readyOrders.length} ready orders และ ${_completedOrders.length} completed/cancelled orders (7d) สำเร็จ');
     } catch (e) {
       print('❌ Error loading orders: $e');
     }
@@ -340,6 +357,19 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
                 ),
               );
             }).toList(),
+            // If order was cancelled, show cancellation / rejection reason supplied by restaurant
+            if (status == 'cancelled') ...[
+              const SizedBox(height: 8),
+              Text(
+                'เหตุผลการยกเลิก: ${order['cancellation_reason'] ?? order['rejection_reason'] ?? 'ไม่ระบุ'}',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.red[700],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+
             const Divider(height: 24),
             // ยอดรวม
             Row(
