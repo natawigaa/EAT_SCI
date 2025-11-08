@@ -269,8 +269,9 @@ class _OrdersReportTabState extends State<OrdersReportTab> {
               children: [
                 Expanded(flex: 1, child: Text('Order#', style: TextStyle(fontWeight: FontWeight.bold))),
                 Expanded(flex: 1, child: Text('เวลา', style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(flex: 2, child: Text('Student ID', style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(flex: 3, child: Text('รายการ', style: TextStyle(fontWeight: FontWeight.bold))),
+                // Student ID column removed to save horizontal space
+                // Make 'รายการ' column even narrower (flex 1) and center the header label
+                Expanded(flex: 1, child: Center(child: Text('รายการ', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center))),
                 Expanded(flex: 1, child: Text('ยอดรวม', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
                 Expanded(flex: 1, child: Text('สถานะ', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
               ],
@@ -298,8 +299,9 @@ class _OrdersReportTabState extends State<OrdersReportTab> {
                   children: [
                     Expanded(flex: 1, child: Text('#${order['id']}')),
                     Expanded(flex: 1, child: Text(timeStr)),
-                    Expanded(flex: 2, child: Text(order['student_id']?.toString() ?? '-')),
-                    Expanded(flex: 3, child: Text(itemsStr.isEmpty ? '-' : itemsStr, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    // Student ID removed from table rows
+                    // Narrower items column (flex 1)
+                    Expanded(flex: 1, child: Text(itemsStr.isEmpty ? '-' : itemsStr, maxLines: 1, overflow: TextOverflow.ellipsis)),
                     Expanded(
                       flex: 1,
                       child: Text(
