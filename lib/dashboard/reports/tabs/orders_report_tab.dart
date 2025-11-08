@@ -476,17 +476,51 @@ class _OrdersReportTabState extends State<OrdersReportTab> {
       final fileName = 'OrdersReport_${widget.restaurantName}_$dateStr.xlsx';
       
       // Save file (Platform-specific)
-      if (Platform.isAndroid || Platform.isIOS) {
+      if (Platform.isAndroid) {
+        // Save to external storage (app-specific) Downloads folder so user can access the file
+        final extDir = await getExternalStorageDirectory();
+        if (extDir == null) throw Exception('ไม่สามารถเข้าถึงพื้นที่เก็บไฟล์ภายนอกได้');
+
+        // Use a Downloads subfolder inside the app external dir to avoid needing extra permissions
+        final downloadsDir = Directory('${extDir.path}/Download');
+        if (!await downloadsDir.exists()) await downloadsDir.create(recursive: true);
+
+        final outFile = File('${downloadsDir.path}/$fileName');
+        await outFile.writeAsBytes(fileBytes);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ดาวน์โหลดสำเร็จ: $fileName'),
+              backgroundColor: Colors.green,
+              action: SnackBarAction(
+                label: 'เปิดโฟลเดอร์',
+                textColor: Colors.white,
+                onPressed: () async {
+                  // Try opening the folder using a platform-appropriate command
+                  try {
+                    await Process.run('am', ['start', '-a', 'android.intent.action.VIEW', '-d', 'file://${downloadsDir.path}']);
+                  } catch (_) {
+                    // Fallback: try sharing the file (lets user open it)
+                    await Share.shareXFiles([XFile(outFile.path)], subject: 'รายงานออเดอร์ - ${widget.restaurantName}', text: 'รายงานออเดอร์ช่วง: $periodText');
+                  }
+                },
+              ),
+            ),
+          );
+        }
+      } else if (Platform.isIOS) {
+        // On iOS we continue to use share sheet (no public Downloads folder)
         final tempDir = await getTemporaryDirectory();
         final tempFile = File('${tempDir.path}/$fileName');
         await tempFile.writeAsBytes(fileBytes);
-        
+
         final result = await Share.shareXFiles(
           [XFile(tempFile.path)],
           subject: 'รายงานออเดอร์ - ${widget.restaurantName}',
           text: 'รายงานออเดอร์ช่วง: $periodText',
         );
-        
+
         if (mounted) {
           if (result.status == ShareResultStatus.success) {
             ScaffoldMessenger.of(context).showSnackBar(

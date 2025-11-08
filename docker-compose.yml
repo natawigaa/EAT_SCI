@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # Simple Postgres for local development (not a full Supabase stack).
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: example
+      POSTGRES_DB: eatsci_local
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  # Deno function container for clear_manual_overrides
+  clear_manual_overrides:
+    build:
+      context: ./functions/clear_manual_overrides
+    environment:
+      # Replace these with real values for local testing.
+      SUPABASE_URL: "http://localhost:5432"
+      SUPABASE_SERVICE_ROLE_KEY: "your_service_role_key_here"
+      PORT: '8000'
+    ports:
+      - '8000:8000'
+    depends_on:
+      - db
+
+  # Web preview: serve Flutter web build artifacts from ./build/web using nginx
+  # Note: you must run `flutter build web` locally before using this service.
+  web:
+    image: nginx:alpine
+    volumes:
+      - ./build/web:/usr/share/nginx/html:ro
+    ports:
+      - '8080:80'
+    depends_on:
+      - clear_manual_overrides
+
+volumes:
+  db_data:
