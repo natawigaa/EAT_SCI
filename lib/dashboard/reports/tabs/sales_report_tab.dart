@@ -104,47 +104,57 @@ class _SalesReportTabState extends State<SalesReportTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with Action Buttons
-            Row(
+            // Header with Action Buttons (responsive)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.attach_money, size: 28, color: AppColors.mainOrange),
-                const SizedBox(width: 12),
-                const Text(
-                  'รายงานยอดขาย',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                // ปุ่มสรุปยอดขาย
-                ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _showSalesSummary,
-                  icon: const Icon(Icons.summarize, size: 18),
-                  label: const Text('สรุปยอดขาย'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.mainOrange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                Row(
+                  children: [
+                    Icon(Icons.attach_money, size: 28, color: AppColors.mainOrange),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'รายงานยอดขาย',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
+                    const Spacer(),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                // ปุ่ม Export Excel
-                OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _exportExcel,
-                  icon: const Icon(Icons.download, size: 18),
-                  label: const Text('Export Excel'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.mainOrange,
-                    side: BorderSide(color: AppColors.mainOrange),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 8),
+                // Buttons placed on their own row so they can wrap on small widths
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _showSalesSummary,
+                      icon: const Icon(Icons.summarize, size: 18),
+                      label: const Text('สรุปยอดขาย'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.mainOrange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _exportExcel,
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('Export Excel'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.mainOrange,
+                        side: BorderSide(color: AppColors.mainOrange),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -194,44 +204,53 @@ class _SalesReportTabState extends State<SalesReportTab> {
     final avgChange = _comparison['average_change'] ?? 0.0;
     final completedChange = _comparison['completed_change'] ?? 0.0;
     
-    return GridView.count(
-      crossAxisCount: 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
-      childAspectRatio: 1.5, // เพิ่มความกว้างเทียบกับความสูง
-      children: [
-        _buildSummaryCard(
-          title: 'ยอดขายรวม',
-          value: '฿${revenue.toStringAsFixed(0)}',
-          icon: Icons.attach_money,
-          color: Colors.green,
-          change: revenueChange,
-        ),
-        _buildSummaryCard(
-          title: 'จำนวนออเดอร์',
-          value: '$orders',
-          icon: Icons.receipt_long,
-          color: Colors.blue,
-          change: ordersChange,
-        ),
-        _buildSummaryCard(
-          title: 'ค่าเฉลี่ย/ออเดอร์',
-          value: '฿${avgValue.toStringAsFixed(0)}',
-          icon: Icons.trending_up,
-          color: Colors.orange,
-          change: avgChange != 0.0 ? avgChange : null, // แสดง change ถ้ามีข้อมูล
-        ),
-        _buildSummaryCard(
-          title: 'ออเดอร์สำเร็จ',
-          value: '${_periodSummary['completed_orders'] ?? 0}',
-          icon: Icons.check_circle,
-          color: Colors.purple,
-          change: completedChange != 0.0 ? completedChange : null, // แสดง change ถ้ามีข้อมูล
-        ),
-      ],
-    );
+    // Use LayoutBuilder to choose number of columns based on available width.
+    // On small screens show 2 columns (2x2 grid), on wide screens show 4 columns.
+    return LayoutBuilder(builder: (context, constraints) {
+  final isNarrow = constraints.maxWidth < 700; // tweak breakpoint as needed
+  final crossAxis = isNarrow ? 2 : 4;
+  // Reduce childAspectRatio to make cards slightly taller to avoid bottom overflow
+  final childAspect = isNarrow ? 1.0 : 1.2;
+
+      return GridView.count(
+        crossAxisCount: crossAxis,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+        childAspectRatio: childAspect,
+        children: [
+          _buildSummaryCard(
+            title: 'ยอดขายรวม',
+            value: '฿${revenue.toStringAsFixed(0)}',
+            icon: Icons.attach_money,
+            color: Colors.green,
+            change: revenueChange,
+          ),
+          _buildSummaryCard(
+            title: 'จำนวนออเดอร์',
+            value: '$orders',
+            icon: Icons.receipt_long,
+            color: Colors.blue,
+            change: ordersChange,
+          ),
+          _buildSummaryCard(
+            title: 'ค่าเฉลี่ย/ออเดอร์',
+            value: '฿${avgValue.toStringAsFixed(0)}',
+            icon: Icons.trending_up,
+            color: Colors.orange,
+            change: avgChange != 0.0 ? avgChange : null, // แสดง change ถ้ามีข้อมูล
+          ),
+          _buildSummaryCard(
+            title: 'ออเดอร์สำเร็จ',
+            value: '${_periodSummary['completed_orders'] ?? 0}',
+            icon: Icons.check_circle,
+            color: Colors.purple,
+            change: completedChange != 0.0 ? completedChange : null, // แสดง change ถ้ามีข้อมูล
+          ),
+        ],
+      );
+    });
   }
 
   Widget _buildSummaryCard({

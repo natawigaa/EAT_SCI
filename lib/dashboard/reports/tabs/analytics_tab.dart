@@ -243,9 +243,14 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
       displayHours.add({'hour': h, 'order_count': hourMap[h] ?? 0});
     }
 
-    // Compute Y scale
-    final maxCount = displayHours.map((d) => d['order_count']!).fold<int>(0, (a, b) => math.max(a, b));
-    final double chartMaxY = (maxCount <= 0) ? 1.0 : (maxCount.toDouble() + 1.0);
+  // Compute Y scale
+  final maxCount = displayHours.map((d) => d['order_count']!).fold<int>(0, (a, b) => math.max(a, b));
+  final double chartMaxY = (maxCount <= 0) ? 1.0 : (maxCount.toDouble() + 1.0);
+
+  // Determine label step for bottom X-axis to avoid overlapping labels.
+  // Show at most ~8 labels across the available bars by skipping labels when needed.
+  int labelStep = (displayHours.length / 8).ceil();
+  if (labelStep < 1) labelStep = 1;
 
     // Prepare bar groups
     final barGroups = displayHours.map((e) {
@@ -319,9 +324,11 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      interval: 1,
+                      interval: labelStep.toDouble(),
                       getTitlesWidget: (value, meta) {
                         final hour = value.toInt();
+                        // only render labels for every `labelStep` bars to prevent overlap
+                        if (((hour - minHour) % labelStep) != 0) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
@@ -418,75 +425,136 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     final prevAvg = prevSample > 0 ? prevMinutes / prevSample : 0.0;
     final avgChange = prevAvg > 0 ? ((currentAvg - prevAvg) / prevAvg * 100) : 0.0;
     final ordersChange = prevSample > 0 ? ((sampleSize - prevSample) / prevSample * 100) : 0.0;
+    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.only(right: 12),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+        // Responsive stat cards: on narrow widths stack vertically or use compact mode
+        LayoutBuilder(builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 420;
+          if (isNarrow) {
+            return Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [Icon(Icons.access_time_filled, color: Colors.blue, size: 28), const SizedBox(width: 8), const Text('เวลารวม', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))]),
+                      const SizedBox(height: 12),
+                      Text('${totalMinutes.toStringAsFixed(1)} นาที', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue)),
+                    ],
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.access_time_filled, color: Colors.blue, size: 32),
-                        const SizedBox(width: 10),
-                        const Text('เวลารวมทั้งหมด', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Text('${totalMinutes.toStringAsFixed(1)} นาที', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blue)),
-                  ],
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [Icon(Icons.receipt_long, color: Colors.green, size: 28), const SizedBox(width: 8), const Text('จำนวนออเดอร์', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))]),
+                      const SizedBox(height: 12),
+                      Text('$sampleSize ออเดอร์', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
+
+          // default (wide) layout
+          return Row(
+            children: [
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.access_time_filled, color: Colors.blue, size: 32),
+                          const SizedBox(width: 10),
+                          const Text('เวลารวม', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text('${totalMinutes.toStringAsFixed(1)} นาที', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue)),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.only(left: 12),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.receipt_long, color: Colors.green, size: 32),
-                        const SizedBox(width: 10),
-                        const Text('จำนวนออเดอร์', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Text('$sampleSize ออเดอร์', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.green)),
-                  ],
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.only(left: 12),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.receipt_long, color: Colors.green, size: 32),
+                          const SizedBox(width: 10),
+                          const Text('จำนวนออเดอร์', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text('$sampleSize ออเดอร์', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        }),
         const SizedBox(height: 24),
         // Split the detailed segment times into three small cards for clarity
         Row(
@@ -734,6 +802,37 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
         ],
       );
     }
+
+    // Helper to measure text width so numeric columns can be sized to header length
+    double _measureTextWidth(String text, TextStyle style) {
+      final tp = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: Directionality.of(context),
+      );
+      tp.layout();
+      return tp.width;
+    }
+
+    final headerStyle = const TextStyle(fontWeight: FontWeight.bold);
+    final qtyHeaderW = (_measureTextWidth('จำนวนที่สั่ง', headerStyle) + 20).clamp(60.0, 120.0);
+    final revenueHeaderW = (_measureTextWidth('ราคารวม (บาท)', headerStyle) + 28).clamp(80.0, 200.0);
+
+    // compute safe totals using the filteredMenus in this scope
+    final int totalQty = filteredMenus.fold<int>(0, (s, m) {
+      final v = m['total_quantity'];
+      if (v is int) return s + v;
+      if (v is double) return s + v.toInt();
+      if (v is String) return s + (int.tryParse(v) ?? 0);
+      return s;
+    });
+    final double totalRevenue = filteredMenus.fold<double>(0.0, (s, m) {
+      final v = m['total_revenue'];
+      if (v is double) return s + v;
+      if (v is int) return s + v.toDouble();
+      if (v is String) return s + (double.tryParse(v) ?? 0.0);
+      return s;
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -746,23 +845,109 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800]),
           ),
         ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: fullWidth ? MediaQuery.of(context).size.width - 96 : null,
-            child: DataTable(
-              headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-              columns: const [
-                DataColumn(label: Text('ชื่อเมนู', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('จำนวนที่สั่ง', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('ราคารวม (บาท)', style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              rows: filteredMenus.map((menu) => DataRow(cells: [
-                DataCell(Text(menu['menu_name'].toString())),
-                DataCell(Text(menu['total_quantity'].toString())),
-                DataCell(Text(menu['total_revenue'].toStringAsFixed(2))),
-              ])).toList(),
-            ),
+        // Custom table that mimics orders_report sizing strategy
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text('ชื่อเมนู', style: TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis, maxLines: 1),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(width: qtyHeaderW, child: const Center(child: Text('จำนวนที่สั่ง', style: TextStyle(fontWeight: FontWeight.bold)))),
+                    const SizedBox(width: 8),
+                    SizedBox(width: revenueHeaderW, child: const Text('ราคารวม (บาท)', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                  ],
+                ),
+              ),
+
+              // Rows
+              ...filteredMenus.map((menu) {
+                final name = menu['menu_name']?.toString() ?? '-';
+                final qty = menu['total_quantity'] ?? 0;
+                final revenue = (menu['total_revenue'] ?? 0.0).toDouble();
+
+                return InkWell(
+                  onTap: () {},
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: qtyHeaderW,
+                          child: Text(
+                            qty.toString(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: revenueHeaderW,
+                          child: Text(
+                            '฿${revenue.toStringAsFixed(2)}',
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+
+              // Footer / totals
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(12), bottomRight: Radius.circular(12)),
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(child: Text('รวมทั้งหมด', style: TextStyle(fontWeight: FontWeight.bold))),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: qtyHeaderW,
+                      child: Text(
+                        '$totalQty',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: revenueHeaderW,
+                      child: Text(
+                        '฿${totalRevenue.toStringAsFixed(2)}',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ],

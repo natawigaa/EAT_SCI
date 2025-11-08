@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PaymentScreen extends StatefulWidget {
   final double totalAmount;
@@ -36,6 +38,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   
   // สำหรับอัปโหลดสลิป
   File? _selectedSlipImage;
+  // บน Web เก็บ image bytes แทน File
+  Uint8List? _selectedSlipBytes;
   bool _isUploadingSlip = false;
   int? _createdOrderId; // เก็บ order ID หลังสร้างเสร็จ
   
@@ -389,9 +393,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Container(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: (_selectedSlipImage != null && !_isUploadingSlip && !_isCreatingOrder)
-            ? _confirmPaymentWithSlip
-            : null,
+    onPressed: ((_selectedSlipImage != null || _selectedSlipBytes != null) && !_isUploadingSlip && !_isCreatingOrder)
+      ? _confirmPaymentWithSlip
+      : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color.fromARGB(255, 239, 119, 34),
           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -411,11 +415,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
               )
             : Text(
-                _selectedSlipImage == null 
-                    ? 'กรุณาเลือกสลิปการโอนเงิน' 
+                (_selectedSlipImage == null && _selectedSlipBytes == null)
+                    ? 'กรุณาเลือกสลิปการโอนเงิน'
                     : 'ยืนยันการชำระเงิน',
                 style: TextStyle(
-                  color: _selectedSlipImage == null ? Colors.grey.shade600 : Colors.white,
+                  color: (_selectedSlipImage == null && _selectedSlipBytes == null) ? Colors.grey.shade600 : Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -473,8 +477,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             const SizedBox(height: 16),
 
-            // แสดงภาพที่เลือก
-            if (_selectedSlipImage != null) ...[
+            // แสดงภาพที่เลือก (รองรับทั้ง Web และ Mobile)
+            if (_selectedSlipBytes != null) ...[
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(
+                    _selectedSlipBytes!,
+                    width: 200,
+                    height: 300,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ] else if (_selectedSlipImage != null) ...[
               Center(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
@@ -496,7 +513,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 onPressed: _isUploadingSlip ? null : _pickSlipImage,
                 icon: const Icon(Icons.image),
                 label: Text(
-                  _selectedSlipImage == null
+                  (_selectedSlipImage == null && _selectedSlipBytes == null)
                       ? 'เลือกภาพสลิป'
                       : 'เปลี่ยนภาพสลิป',
                 ),
@@ -526,10 +543,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
       );
 
       if (image != null) {
-        setState(() {
-          _selectedSlipImage = File(image.path);
-        });
-        print('✅ เลือกภาพสลิป: ${image.path}');
+        if (kIsWeb) {
+          final bytes = await image.readAsBytes();
+          setState(() {
+            _selectedSlipBytes = bytes;
+            _selectedSlipImage = null;
+          });
+          print('✅ เลือกภาพสลิป (web), bytes: ${bytes.length}');
+        } else {
+          setState(() {
+            _selectedSlipImage = File(image.path);
+            _selectedSlipBytes = null;
+          });
+          print('✅ เลือกภาพสลิป: ${image.path}');
+        }
       }
     } catch (e) {
       print('❌ Error picking image: $e');
@@ -538,7 +565,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _uploadSlip() async {
-    if (_selectedSlipImage == null || _createdOrderId == null) return;
+    if ((_selectedSlipImage == null && _selectedSlipBytes == null) || _createdOrderId == null) return;
 
     setState(() {
       _isUploadingSlip = true;
@@ -547,7 +574,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     try {
       // 1. อัปโหลดไฟล์ไป Supabase Storage
       final slipUrl = await SupabaseService.uploadPaymentSlip(
-        _selectedSlipImage!.path,
+        kIsWeb ? _selectedSlipBytes : _selectedSlipImage?.path,
         _createdOrderId!,
       );
 
@@ -656,7 +683,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   // ฟังก์ชันใหม่: อัปโหลดสลิป + สร้าง order พร้อมกัน
   Future<void> _confirmPaymentWithSlip() async {
-    if (_selectedSlipImage == null) {
+    if (_selectedSlipImage == null && _selectedSlipBytes == null) {
       NotificationHelper.showWarning(
         context,
         'กรุณาเลือกสลิปการโอนเงินก่อน',
@@ -669,7 +696,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _isCreatingOrder = true;
     });
 
-    try {
+  try {
       // ดึงข้อมูลจาก cart
       final cartItems = _cartService.cartItems;
       final restaurantId = _cartService.currentRestaurantId;
@@ -683,9 +710,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
         throw Exception('ไม่พบข้อมูลนักศึกษา กรุณา login ใหม่');
       }
 
-      print('🔄 ขั้นตอนที่ 1: สร้าง order ก่อน...');
-      
-      // ขั้นตอนที่ 1: สร้าง order (ยังไม่มีสลิป)
+      // Upload slip first (so we only create the order when upload succeeds)
+      print('🔄 ขั้นตอนที่ 1: อัปโหลดสลิป (ก่อนสร้าง order)...');
+      final slipUrl = await SupabaseService.uploadPaymentSlip(
+        kIsWeb ? _selectedSlipBytes : _selectedSlipImage?.path,
+        null, // no orderId yet — upload into temp path
+      );
+
+      if (slipUrl == null) {
+        throw Exception('อัปโหลดสลิปไม่สำเร็จ');
+      }
+
+      print('🔄 ขั้นตอนที่ 2: สร้าง order พร้อมสลิป...');
+
+      // Now create order and include paymentSlipUrl so the order is atomic
       final orderResult = await SupabaseService.createOrder(
         studentId: _studentId!,
         restaurantId: int.parse(restaurantId),
@@ -694,6 +732,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         totalItems: _cartService.totalItems,
         cartItems: cartItems,
         notes: null,
+        paymentSlipUrl: slipUrl,
       );
 
       if (orderResult == null) {
@@ -701,33 +740,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
       }
 
       final orderId = orderResult['id'] as int;
-      print('✅ Order ID: $orderId');
+      print('✅ Order created with slip. Order ID: $orderId');
 
-      print('🔄 ขั้นตอนที่ 2: อัปโหลดสลิป...');
-      
-      // ขั้นตอนที่ 2: อัปโหลดสลิป
-      final slipUrl = await SupabaseService.uploadPaymentSlip(
-        _selectedSlipImage!.path,
-        orderId,
-      );
-
-      if (slipUrl == null) {
-        throw Exception('อัปโหลดสลิปไม่สำเร็จ');
-      }
-
-      print('🔄 ขั้นตอนที่ 3: อัปเดต order พร้อมสลิป...');
-      
-      // ขั้นตอนที่ 3: อัปเดต order ด้วย slip URL
-      final updateSuccess = await SupabaseService.updateOrderWithSlip(
-        orderId,
-        slipUrl,
-      );
-
-      if (!updateSuccess) {
-        throw Exception('อัปเดต order ไม่สำเร็จ');
-      }
-
-      print('✅ สร้าง order พร้อมสลิปสำเร็จ!');
+      // Optionally, move the uploaded temp slip to a filename containing the orderId
+      // or keep the temp path — for now we keep the uploaded URL as-is.
 
       setState(() {
         _createdOrderId = orderId;
@@ -735,10 +751,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _isCreatingOrder = false;
       });
 
-      // ล้างตะกร้า
+      // Clear cart and navigate
       _cartService.clearCart();
-
-      // แสดง success dialog
       _showSuccessDialogAndNavigate();
 
     } catch (e) {

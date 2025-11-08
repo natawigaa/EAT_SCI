@@ -1,5 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:eatscikmitl/services/upload_helper.dart';
 
 class SupabaseService {
   static final SupabaseClient _client = Supabase.instance.client;
@@ -231,23 +234,30 @@ class SupabaseService {
     required int totalItems,
     required List<Map<String, dynamic>> cartItems,
     String? notes,
+    String? paymentSlipUrl,
   }) async {
     try {
       print('📝 กำลังสร้าง order...');
       
       // 1. สร้าง order หลัก
+      final insertData = {
+        'student_id': studentId,
+        'restaurant_id': restaurantId,
+        'restaurant_name': restaurantName,
+        'total_amount': totalAmount,
+        'total_items': totalItems,
+        'status': 'pending',
+        'payment_method': 'qr_code',
+        'notes': notes,
+      };
+      if (paymentSlipUrl != null) {
+        insertData['payment_slip_url'] = paymentSlipUrl;
+        insertData['slip_uploaded_at'] = DateTime.now().toIso8601String();
+      }
+
       final orderResponse = await _client
           .from('orders')
-          .insert({
-            'student_id': studentId,
-            'restaurant_id': restaurantId,
-            'restaurant_name': restaurantName,
-            'total_amount': totalAmount,
-            'total_items': totalItems,
-            'status': 'pending',
-            'payment_method': 'qr_code',
-            'notes': notes,
-          })
+          .insert(insertData)
           .select()
           .single();
       
@@ -1245,7 +1255,7 @@ class SupabaseService {
   // ========================================
 
   /// อัปโหลด payment slip ไป Supabase Storage
-  static Future<String?> uploadPaymentSlip(String filePath, int orderId) async {
+  static Future<String?> uploadPaymentSlip(Object? fileOrBytes, int? orderId) async {
     try {
       // เช็คว่า user login แล้วหรือยัง
       final user = _client.auth.currentUser;
@@ -1256,22 +1266,43 @@ class SupabaseService {
       
       print('👤 Current user: ${user.email} (${user.id})');
       
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'order_slips/order_${orderId}_$timestamp.jpg';
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    // If orderId is provided, store under order_slips/order_<id>_timestamp.jpg
+    // otherwise store in a temp path so we can upload before creating an order.
+    final fileName = orderId != null
+      ? 'order_slips/order_${orderId}_$timestamp.jpg'
+      : 'order_slips/temp_$timestamp.jpg';
       
       print('📤 อัปโหลดสลิป: $fileName');
       print('📂 Bucket: payment-slips');
-      print('📁 File path: $filePath');
+  print('📁 Uploading slip for order: $orderId');
       
-      // อัปโหลดไฟล์
-      final uploadResult = await _client.storage
-          .from('payment-slips')
-          .upload(fileName, File(filePath), fileOptions: const FileOptions(
+      // อัปโหลดไฟล์ — รองรับทั้ง Web (bytes) และ native (File path)
+      Object? uploadResult;
+      if (kIsWeb) {
+        if (fileOrBytes is Uint8List) {
+          // Use the web helper to create a browser File/Blob and upload it.
+          uploadResult = await uploadBytesToBucket(
+            _client,
+            'payment-slips',
+            fileName,
+            fileOrBytes,
             contentType: 'image/jpeg',
-            upsert: false,
-          ));
+          );
+        } else {
+          throw Exception('On web, uploadPaymentSlip expects Uint8List bytes');
+        }
+      } else {
+        final filePath = fileOrBytes as String;
+        uploadResult = await _client.storage
+            .from('payment-slips')
+            .upload(fileName, File(filePath), fileOptions: const FileOptions(
+              contentType: 'image/jpeg',
+              upsert: false,
+            ));
+      }
       
-      print('✅ Upload result: $uploadResult');
+  print('✅ Upload result: $uploadResult');
       
       // สร้าง Signed URL สำหรับ private bucket (อายุ 1 ปี)
       final url = await _client.storage
@@ -1559,16 +1590,17 @@ class SupabaseService {
           .neq('status', 'cancelled');
       
       final orders = List<Map<String, dynamic>>.from(response);
-      
-      // คำนวณสถิติ
-      final totalOrders = orders.length;
+
+  // คำนวณสถิติ
       final completedOrders = orders.where((o) => o['status'] == 'completed').length;
       final totalRevenue = orders.fold<double>(
         0.0,
         (sum, order) => sum + (order['total_amount'] ?? 0).toDouble(),
       );
+      // totalOrders is the number of non-cancelled orders returned by the query
+      final totalOrders = orders.length;
       final averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0.0;
-      
+
       print('✅ ยอดขายวันนี้: ฿${totalRevenue.toStringAsFixed(0)} จาก $totalOrders ออเดอร์');
       
       return {
@@ -1963,7 +1995,9 @@ class SupabaseService {
       final orders = allOrders.where((o) => o['status'] != 'cancelled').toList();
       print('🔍 ดึงได้ ${orders.length} orders ทั้งหมด (ยกเว้น cancelled)');
       if (orders.isNotEmpty) {
-        print('� Orders details:');
+        // Avoid non-ASCII replacement characters in logs which can
+        // cause decoding issues in some platforms. Use plain ASCII here.
+        print('Orders details:');
         for (var o in orders) {
           print('   - Order #${o['id']} | Restaurant: ${o['restaurant_id']} | Status: ${o['status']} | Amount: ฿${o['total_amount']} | Created: ${o['created_at']}');
         }
@@ -2453,18 +2487,16 @@ class SupabaseService {
             .eq('id', restaurantId)
             .single();
 
-        if (businessHoursResponse != null && businessHoursResponse is Map) {
-          // Use only the canonical integer columns `opening_hour` and `closing_hour`.
-          // Legacy text columns (open_time/close_time) are no longer considered.
-          final ohRaw = businessHoursResponse['opening_hour'];
-          final chRaw = businessHoursResponse['closing_hour'];
+        // Use only the canonical integer columns `opening_hour` and `closing_hour`.
+        // Legacy text columns (open_time/close_time) are no longer considered.
+        final ohRaw = businessHoursResponse['opening_hour'];
+        final chRaw = businessHoursResponse['closing_hour'];
 
-          if (ohRaw != null) {
-            openingHour = (ohRaw is int) ? ohRaw : (int.tryParse(ohRaw.toString()) ?? openingHour);
-          }
-          if (chRaw != null) {
-            closingHour = (chRaw is int) ? chRaw : (int.tryParse(chRaw.toString()) ?? closingHour);
-          }
+        if (ohRaw != null) {
+          openingHour = (ohRaw is int) ? ohRaw : (int.tryParse(ohRaw.toString()) ?? openingHour);
+        }
+        if (chRaw != null) {
+          closingHour = (chRaw is int) ? chRaw : (int.tryParse(chRaw.toString()) ?? closingHour);
         }
 
         print('🕒 เวลาเปิดร้าน (inferred): ${openingHour.toString().padLeft(2,'0')}:00, เวลาปิดร้าน: ${closingHour.toString().padLeft(2,'0')}:00');

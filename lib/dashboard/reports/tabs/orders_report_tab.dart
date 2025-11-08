@@ -429,7 +429,7 @@ class _OrdersReportTabState extends State<OrdersReportTab> {
       ]);
       sheet.appendRow([excel_lib.TextCellValue('')]);
       
-      // Table header
+      // Table header (Student ID removed to match UI)
       sheet.appendRow([
         excel_lib.TextCellValue('Order ID'),
         excel_lib.TextCellValue('เวลา'),

@@ -34,7 +34,7 @@ class _ProductReportTabState extends State<ProductReportTab> {
   DateTime? _customStartDate;
   DateTime? _customEndDate;
   List<Map<String, dynamic>> _products = [];
-  List<Map<String, dynamic>> _previousProducts = []; // สำหรับเปรียบเทียบ
+  // previousProducts removed since change column was removed
   String _searchQuery = '';
   String _sortBy = 'quantity'; // 'quantity', 'revenue', 'name'
   bool _isDescending = true;
@@ -94,19 +94,8 @@ class _ProductReportTabState extends State<ProductReportTab> {
         endDate: endDate,
       );
       
-      // ดึงข้อมูลช่วงก่อนหน้าเพื่อเปรียบเทียบ
-      final previousStartDate = startDate.subtract(endDate.difference(startDate));
-      final previousEndDate = startDate;
-      
-      final previousProducts = await SupabaseService.getProductSalesReport(
-        widget.restaurantId,
-        startDate: previousStartDate,
-        endDate: previousEndDate,
-      );
-      
       setState(() {
         _products = products;
-        _previousProducts = previousProducts;
         _isLoading = false;
       });
       
@@ -115,7 +104,6 @@ class _ProductReportTabState extends State<ProductReportTab> {
       print('❌ Error loading product data: $e');
       setState(() {
         _products = [];
-        _previousProducts = [];
         _isLoading = false;
       });
     }
@@ -311,50 +299,63 @@ class _ProductReportTabState extends State<ProductReportTab> {
             child: Row(
               children: [
                 const Expanded(
-                  flex: 3,
+                  // reduced from 4 -> 2 after removing the badge to give more room to numeric columns
+                  flex: 2,
                   child: Text(
                     'ชื่อเมนู',
                     style: TextStyle(fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    maxLines: 1,
+                  ),
+                ),
+                // Make quantity column a fixed-ish width so it doesn't take extra space
+                SizedBox(
+                  width: 72,
+                  child: const Center(
+                    child: Text(
+                      'จำนวน',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      maxLines: 1,
+                    ),
                   ),
                 ),
                 const Expanded(
-                  flex: 1,
-                  child: Text(
-                    'จำนวน',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const Expanded(
-                  flex: 1,
-                  child: Text(
-                    'เปลี่ยนแปลง',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const Expanded(
-                  flex: 1,
+                  // give price a bit more room
+                  flex: 2,
                   child: Text(
                     'ราคา/ชิ้น',
                     style: TextStyle(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    maxLines: 1,
                   ),
                 ),
                 const Expanded(
-                  flex: 1,
+                  // give revenue more room so header fits
+                  flex: 2,
                   child: Text(
                     'รายได้รวม',
                     style: TextStyle(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    maxLines: 1,
                   ),
                 ),
                 const Expanded(
-                  flex: 1,
+                  // give percentage header more room
+                  flex: 2,
                   child: Text(
                     'สัดส่วน',
                     style: TextStyle(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    maxLines: 1,
                   ),
                 ),
               ],
@@ -367,16 +368,7 @@ class _ProductReportTabState extends State<ProductReportTab> {
                 ? (product['revenue'] / totalRevenue * 100)
                 : 0.0;
             
-            // คำนวณ % change
-            final previousProduct = _previousProducts.firstWhere(
-              (p) => p['name'] == product['name'],
-              orElse: () => {'quantity': 0, 'revenue': 0.0},
-            );
-            final prevQty = previousProduct['quantity'] as int;
-            final currentQty = product['quantity'] as int;
-            final change = prevQty > 0 
-                ? ((currentQty - prevQty) / prevQty * 100)
-                : 0.0;
+            // (Removed change calculation - column was removed)
             
             // เช็คว่าเป็น Top Seller หรือไม่
             final isTopSeller = product['name'] == topSeller;
@@ -391,106 +383,61 @@ class _ProductReportTabState extends State<ProductReportTab> {
               ),
               child: Row(
                 children: [
-                  Expanded(
-                    flex: 3,
-                    child: Row(
-                      children: [
-                        Text(
-                          product['name'],
-                          style: TextStyle(
-                            fontWeight: isTopSeller ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                        if (isTopSeller) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.amber,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.star, size: 12, color: Colors.white),
-                                SizedBox(width: 4),
-                                Text(
-                                  'ขายดี',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
+                    Expanded(
+                      flex: 2,
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              product['name'],
+                              style: TextStyle(
+                                fontWeight: isTopSeller ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          // Top-seller badge removed to save horizontal space
                         ],
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Text(
-                      '${product['quantity']}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (change != 0.0) ...[
-                          Icon(
-                            change > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                            size: 12,
-                            color: change > 0 ? Colors.green : Colors.red,
-                          ),
-                          const SizedBox(width: 2),
-                          Text(
-                            '${change > 0 ? '+' : ''}${change.toStringAsFixed(0)}%',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: change > 0 ? Colors.green : Colors.red,
-                            ),
-                          ),
-                        ] else
-                          Text(
-                            '-',
-                            style: TextStyle(color: Colors.grey[400]),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Text(
-                      '฿${product['price'].toStringAsFixed(0)}',
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Text(
-                      '฿${product['revenue'].toStringAsFixed(0)}',
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
                       ),
                     ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Text(
-                      '${percentage.toStringAsFixed(1)}%',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(color: Colors.grey[600]),
+                    SizedBox(
+                      width: 72,
+                      child: Text(
+                        '${product['quantity']}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
-                  ),
+                    Expanded(
+                      // give price more room
+                      flex: 2,
+                      child: Text(
+                        '฿${product['price'].toStringAsFixed(0)}',
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                    Expanded(
+                      // give revenue more room
+                      flex: 2,
+                      child: Text(
+                        '฿${product['revenue'].toStringAsFixed(0)}',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      // give percentage a bit more room
+                      flex: 2,
+                      child: Text(
+                        '${percentage.toStringAsFixed(1)}%'.toString(),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    ),
                 ],
               ),
             );
@@ -507,7 +454,7 @@ class _ProductReportTabState extends State<ProductReportTab> {
               ),
             ),
             child: Row(
-              children: [
+                children: [
                 const Expanded(
                   flex: 3,
                   child: Text(
@@ -515,18 +462,17 @@ class _ProductReportTabState extends State<ProductReportTab> {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
-                Expanded(
-                  flex: 1,
+                SizedBox(
+                  width: 72,
                   child: Text(
                     '${_filteredProducts.fold<int>(0, (sum, p) => sum + (p['quantity'] as int))}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
-                const Expanded(flex: 1, child: SizedBox()),
-                const Expanded(flex: 1, child: SizedBox()),
+                const Expanded(flex: 2, child: SizedBox()),
                 Expanded(
-                  flex: 1,
+                  flex: 2,
                   child: Text(
                     '฿${totalRevenue.toStringAsFixed(0)}',
                     textAlign: TextAlign.right,
@@ -538,7 +484,7 @@ class _ProductReportTabState extends State<ProductReportTab> {
                   ),
                 ),
                 const Expanded(
-                  flex: 1,
+                  flex: 2,
                   child: Text(
                     '100%',
                     textAlign: TextAlign.right,
@@ -589,11 +535,10 @@ class _ProductReportTabState extends State<ProductReportTab> {
       sheet.appendRow([excel_lib.TextCellValue('ช่วงเวลา: $dateRange')]);
       sheet.appendRow([excel_lib.TextCellValue('')]);
       
-      // คอลัมน์หัวตาราง
+      // คอลัมน์หัวตาราง (removed เปลี่ยนแปลง column)
       sheet.appendRow([
         excel_lib.TextCellValue('ชื่อเมนู'),
         excel_lib.TextCellValue('จำนวนขาย'),
-        excel_lib.TextCellValue('เปลี่ยนแปลง (%)'),
         excel_lib.TextCellValue('ราคา/ชิ้น'),
         excel_lib.TextCellValue('รายได้รวม'),
         excel_lib.TextCellValue('สัดส่วน (%)'),
@@ -605,19 +550,9 @@ class _ProductReportTabState extends State<ProductReportTab> {
       for (var product in _filteredProducts) {
         final percentage = totalRevenue > 0 ? (product['revenue'] / totalRevenue * 100) : 0.0;
         
-        // คำนวณ % change
-        final previousProduct = _previousProducts.firstWhere(
-          (p) => p['name'] == product['name'],
-          orElse: () => {'quantity': 0},
-        );
-        final prevQty = previousProduct['quantity'] as int;
-        final currentQty = product['quantity'] as int;
-        final change = prevQty > 0 ? ((currentQty - prevQty) / prevQty * 100) : 0.0;
-        
         sheet.appendRow([
           excel_lib.TextCellValue(product['name']),
           excel_lib.IntCellValue(product['quantity']),
-          excel_lib.DoubleCellValue(change),
           excel_lib.DoubleCellValue(product['price']),
           excel_lib.DoubleCellValue(product['revenue']),
           excel_lib.DoubleCellValue(percentage),
@@ -629,7 +564,6 @@ class _ProductReportTabState extends State<ProductReportTab> {
       sheet.appendRow([
         excel_lib.TextCellValue('รวมทั้งหมด'),
         excel_lib.IntCellValue(_filteredProducts.fold<int>(0, (sum, p) => sum + (p['quantity'] as int))),
-        excel_lib.TextCellValue(''),
         excel_lib.TextCellValue(''),
         excel_lib.DoubleCellValue(totalRevenue),
         excel_lib.DoubleCellValue(100.0),

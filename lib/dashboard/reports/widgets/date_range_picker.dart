@@ -26,45 +26,76 @@ class DateRangePicker extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.grey[300]!),
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.calendar_today, color: AppColors.mainOrange, size: 16),
-          const SizedBox(width: 8),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedPeriod,
-              isDense: true,
-              icon: Icon(Icons.arrow_drop_down, color: Colors.grey[700], size: 20),
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.calendar_today, color: AppColors.mainOrange, size: 16),
+              const SizedBox(width: 8),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedPeriod,
+                  isDense: true,
+                  icon: Icon(Icons.arrow_drop_down, color: Colors.grey[700], size: 20),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'today', child: Text('วันนี้')),
+                    DropdownMenuItem(value: 'week', child: Text('สัปดาห์นี้')),
+                    DropdownMenuItem(value: 'month', child: Text('เดือนนี้')),
+                    DropdownMenuItem(value: 'custom', child: Text('กำหนดเอง')),
+                  ],
+                  onChanged: (value) {
+                    if (value == 'custom') {
+                      _showCustomDateRangePicker(context);
+                    } else {
+                      onPeriodChanged(value!, null, null);
+                    }
+                  },
+                ),
               ),
-              items: const [
-                DropdownMenuItem(value: 'today', child: Text('วันนี้')),
-                DropdownMenuItem(value: 'week', child: Text('สัปดาห์นี้')),
-                DropdownMenuItem(value: 'month', child: Text('เดือนนี้')),
-                DropdownMenuItem(value: 'custom', child: Text('กำหนดเอง')),
-              ],
-              onChanged: (value) {
-                if (value == 'custom') {
-                  _showCustomDateRangePicker(context);
-                } else {
-                  onPeriodChanged(value!, null, null);
-                }
-              },
-            ),
+            ],
           ),
+
+          // If custom range selected, show label + start date + end date in vertical order
           if (selectedPeriod == 'custom' && customStartDate != null && customEndDate != null) ...[
-            const SizedBox(width: 8),
-            Text(
-              '${_formatDate(customStartDate!)} - ${_formatDate(customEndDate!)}',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
+            const SizedBox(height: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'กำหนดวัน',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatDate(customStartDate!),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatDate(customEndDate!),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ],
         ],
