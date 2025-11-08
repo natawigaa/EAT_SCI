@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
-import 'dart:typed_data';
 
 class SupabaseService {
   static final SupabaseClient _client = Supabase.instance.client;
@@ -1283,48 +1282,6 @@ class SupabaseService {
       return url;
     } catch (e) {
       print('❌ Error uploading payment slip: $e');
-      return null;
-    }
-  }
-
-  /// อัปโหลด payment slip (จาก bytes) — web-friendly
-  static Future<String?> uploadPaymentSlipBytes(Uint8List bytes, String originalFileName, int orderId) async {
-    try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        print('❌ User not logged in! Cannot upload slip.');
-        return null;
-      }
-
-      print('👤 Current user: ${user.email} (${user.id})');
-
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      // try to preserve extension
-      final ext = (originalFileName.contains('.') ? originalFileName.split('.').last : 'jpg');
-      final fileName = 'order_slips/order_${orderId}_$timestamp.$ext';
-
-      print('📤 (bytes) อัปโหลดสลิป: $fileName');
-      print('📂 Bucket: payment-slips');
-      print('📁 Bytes length: ${bytes.lengthInBytes}');
-
-      // upload bytes (works on web and non-web)
-      final uploadResult = await _client.storage
-          .from('payment-slips')
-          .upload(fileName, bytes as dynamic, fileOptions: const FileOptions(
-            contentType: 'image/jpeg',
-            upsert: false,
-          ));
-
-      print('✅ Upload result (bytes): $uploadResult');
-
-      final url = await _client.storage
-          .from('payment-slips')
-          .createSignedUrl(fileName, 60 * 60 * 24 * 365);
-
-      print('✅ อัปโหลดสลิปสำเร็จ (bytes): $url');
-      return url;
-    } catch (e) {
-      print('❌ Error uploading payment slip (bytes): $e');
       return null;
     }
   }

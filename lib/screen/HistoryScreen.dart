@@ -83,13 +83,15 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
     });
 
     try {
-      final orders = await SupabaseService.getCompletedOrders(_studentId!);
+      // Load both completed and cancelled orders so cancelled orders are
+      // preserved in the student's history (display-only). Do not mutate DB.
+      final orders = await SupabaseService.getCompletedAndCancelledOrders(_studentId!);
       setState(() {
         _completedOrders = orders;
         _isLoadingCompleted = false;
       });
     } catch (e) {
-      print('❌ Error loading completed orders: $e');
+      print('❌ Error loading completed/cancelled orders: $e');
       setState(() {
         _isLoadingCompleted = false;
       });
@@ -309,7 +311,7 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
     final restaurantName = order['restaurant_name'] ?? 'ร้านอาหาร';
     final totalAmount = (order['total_amount'] ?? 0).toDouble();
     final totalItems = order['total_items'] ?? 0;
-    final status = order['status'] ?? '';
+  final status = (order['status'] ?? '').toString();
     final createdAt = order['created_at'] != null
         ? DateTime.parse(order['created_at']).toLocal()
         : DateTime.now();
@@ -339,9 +341,15 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
                 children: [
                   Row(
                     children: [
+                      // Choose icon/color based on actual status so cancelled orders
+                      // are rendered clearly in the completed tab.
                       Icon(
-                        isReady ? Icons.pending_actions : Icons.check_circle,
-                        color: isReady ? AppColors.mainOrange : Colors.green,
+                        status == 'ready'
+                            ? Icons.pending_actions
+                            : (status == 'cancelled' ? Icons.cancel : Icons.check_circle),
+                        color: status == 'ready'
+                            ? AppColors.mainOrange
+                            : (status == 'cancelled' ? Colors.red : Colors.green),
                         size: 24,
                       ),
                       const SizedBox(width: 8),
@@ -357,17 +365,18 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isReady 
+                      color: status == 'ready'
                           ? AppColors.mainOrange.withOpacity(0.1)
-                          : Colors.green.withOpacity(0.1),
+                          : (status == 'cancelled' ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1)),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      isReady ? 'พร้อมรับ' : 'สำเร็จ',
+                      // Display exact status for non-ready orders (keep DB status unchanged)
+                      status == 'ready' ? 'พร้อมรับ' : (status == 'cancelled' ? 'ยกเลิก' : 'สำเร็จ'),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: isReady ? AppColors.mainOrange : Colors.green,
+                        color: status == 'ready' ? AppColors.mainOrange : (status == 'cancelled' ? Colors.red : Colors.green),
                       ),
                     ),
                   ),
@@ -537,16 +546,20 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: status == 'ready' 
+                      color: status == 'ready'
                           ? AppColors.mainOrange.withOpacity(0.2)
-                          : Colors.green.withOpacity(0.2),
+                          : (status == 'cancelled' ? Colors.red.withOpacity(0.2) : Colors.green.withOpacity(0.2)),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      status == 'ready' ? 'พร้อมรับ' : 'สำเร็จ',
+                      status == 'ready'
+                          ? 'พร้อมรับ'
+                          : (status == 'cancelled' ? 'ยกเลิก' : 'สำเร็จ'),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: status == 'ready' ? AppColors.mainOrange : Colors.green,
+                        color: status == 'ready'
+                            ? AppColors.mainOrange
+                            : (status == 'cancelled' ? Colors.red : Colors.green),
                       ),
                     ),
                   ),
